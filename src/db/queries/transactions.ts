@@ -28,9 +28,17 @@ export async function createTransaction(data: {
   return rows[0];
 }
 
-export async function getTransactionById(id: string): Promise<Transaction | null> {
-  const { rows } = await pool.query<Transaction>(
-    `SELECT * FROM transactions WHERE id = $1`,
+export async function getTransactionById(id: string): Promise<Transaction & { gear_name?: string; lender_name?: string; borrower_name?: string } | null> {
+  const { rows } = await pool.query(
+    `SELECT t.*,
+            g.name        AS gear_name,
+            lu.name       AS lender_name,
+            bu.name       AS borrower_name
+     FROM transactions t
+     LEFT JOIN gear_items g ON g.id = t.gear_item_id
+     LEFT JOIN users lu     ON lu.id = t.lender_id
+     LEFT JOIN users bu     ON bu.id = t.borrower_id
+     WHERE t.id = $1`,
     [id]
   );
   return rows[0] ?? null;
@@ -44,11 +52,13 @@ export async function getTransactionByRequestId(requestId: string): Promise<Tran
   return rows[0] ?? null;
 }
 
-export async function getTransactionsByUser(userId: string): Promise<Transaction[]> {
-  const { rows } = await pool.query<Transaction>(
-    `SELECT * FROM transactions
-     WHERE lender_id = $1 OR borrower_id = $1
-     ORDER BY created_at DESC`,
+export async function getTransactionsByUser(userId: string): Promise<(Transaction & { gear_name?: string })[]> {
+  const { rows } = await pool.query(
+    `SELECT t.*, g.name AS gear_name
+     FROM transactions t
+     LEFT JOIN gear_items g ON g.id = t.gear_item_id
+     WHERE t.lender_id = $1 OR t.borrower_id = $1
+     ORDER BY t.created_at DESC`,
     [userId]
   );
   return rows;
