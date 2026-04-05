@@ -105,8 +105,12 @@ export default async function transactionRoutes(app: FastifyInstance) {
 
     if (parsed.data.status === 'completed' || parsed.data.status === 'cancelled') {
       await updateGearStatus(tx.gear_item_id, tx.lender_id, 'available');
-      if (tx.request_id && parsed.data.status === 'completed') {
-        await updateRequestStatus(tx.request_id, 'fulfilled');
+      if (tx.request_id) {
+        if (parsed.data.status === 'completed') {
+          await updateRequestStatus(tx.request_id, 'fulfilled');
+        } else if (parsed.data.status === 'cancelled') {
+          await updateRequestStatus(tx.request_id, 'open');
+        }
       }
     }
 
