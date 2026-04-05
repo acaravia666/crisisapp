@@ -179,6 +179,12 @@ const Home = () => {
         saveCoords(c);
         const label = await reverseGeocode(c.lat, c.lng);
         setLocationLabel(label);
+        // Persist location to DB so gear/nearby query works
+        apiClient.post('/users/me/location', {
+          lat: c.lat,
+          lng: c.lng,
+          accuracy_m: pos.coords.accuracy ?? undefined,
+        }).catch(() => {});
       },
       () => {
         reverseGeocode(coords.lat, coords.lng).then(setLocationLabel);
