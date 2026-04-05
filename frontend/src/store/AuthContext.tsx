@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { apiClient } from '../api/client';
+import { requestNotificationPermission, listenForegroundMessages } from '../lib/firebase';
 
 interface User {
   id: string;
@@ -45,7 +46,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setIsLoading(false);
         return;
       }
-      
+
       const response = await apiClient.get('/users/me');
       setUser(response.data.user);
     } catch (error) {
@@ -55,6 +56,23 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setIsLoading(false);
     }
   };
+
+  // Register FCM token once user is authenticated
+  useEffect(() => {
+    if (!user) return;
+    requestNotificationPermission().then((token) => {
+      if (token) {
+        apiClient.post('/users/me/fcm-token', { token }).catch(() => {});
+      }
+    });
+    // Show foreground notifications as a browser notification
+    const unsub = listenForegroundMessages((title, body) => {
+      if (Notification.permission === 'granted') {
+        new Notification(title, { body, icon: '/favicon.svg' });
+      }
+    });
+    return () => unsub();
+  }, [user?.id]);
 
   useEffect(() => {
     checkAuth();
