@@ -6,7 +6,6 @@ import {
   getNearbyRequests, updateRequestStatus,
 } from '../db/queries/requests';
 import { parseGearRequest } from '../services/ai-parser';
-import { matchQueue } from '../workers/match.worker';
 import { env } from '../config/env';
 
 const gearCategoryEnum = z.enum([
@@ -14,7 +13,6 @@ const gearCategoryEnum = z.enum([
   'instruments','lighting','dj_gear','power','adapters','accessories',
 ]);
 
-// Structured request body (user provides all fields)
 const structuredRequestSchema = z.object({
   equipment: z.string().min(2).max(200),
   category:  gearCategoryEnum.optional(),
@@ -27,13 +25,11 @@ const structuredRequestSchema = z.object({
   notes:     z.string().max(500).optional(),
 });
 
-// Natural language request body (AI parses it)
 const naturalRequestSchema = z.object({
   raw_text:  z.string().min(3).max(500),
   lat:       z.number().min(-90).max(90),
   lng:       z.number().min(-180).max(180),
   search_radius_km: z.number().positive().max(50).default(5),
-  // User can optionally override what the AI parsed
   urgency:   z.enum(['normal','soon','urgent','emergency']).optional(),
   action:    z.enum(['rent','lend','sell']).optional(),
 });
@@ -47,7 +43,7 @@ const nearbyQuerySchema = z.object({
 
 export default async function requestRoutes(app: FastifyInstance) {
 
-  // POST /requests — create a structured request
+  // POST /requests — structured request (no BullMQ on Vercel)
   app.post('/', { preHandler: authenticate }, async (request, reply) => {
     const userId = request.user.sub;
     const parsed = structuredRequestSchema.safeParse(request.body);
@@ -56,16 +52,10 @@ export default async function requestRoutes(app: FastifyInstance) {
     }
 
     const req = await createRequest({ requester_id: userId, ...parsed.data });
-
-    // Enqueue async matching — don't block the response
-    await matchQueue.add('match', { requestId: req.id }, {
-      priority: urgencyToPriority(req.urgency),
-    });
-
     return reply.code(201).send({ request: req });
   });
 
-  // POST /requests/parse — AI parses then creates
+  // POST /requests/parse — AI parses, then creates (no BullMQ on Vercel)
   app.post('/parse', { preHandler: authenticate }, async (request, reply) => {
     const userId = request.user.sub;
     const parsed = naturalRequestSchema.safeParse(request.body);
@@ -75,32 +65,27 @@ export default async function requestRoutes(app: FastifyInstance) {
 
     const { raw_text, lat, lng, search_radius_km, urgency: urgencyOverride, action: actionOverride } = parsed.data;
 
-    // Call AI parser
     const aiResult = await parseGearRequest(raw_text);
 
     const req = await createRequest({
-      requester_id:     userId,
-      equipment:        aiResult.equipment,
-      category:         aiResult.category,
-      quantity:         aiResult.quantity,
-      urgency:          urgencyOverride ?? aiResult.urgency,
-      action:           actionOverride  ?? aiResult.action,
+      requester_id:  userId,
+      equipment:     aiResult.equipment,
+      category:      aiResult.category,
+      quantity:      aiResult.quantity,
+      urgency:       urgencyOverride ?? aiResult.urgency,
+      action:        actionOverride  ?? aiResult.action,
       lat,
       lng,
       search_radius_km,
       raw_text,
-      ai_confidence:    aiResult.confidence,
-      notes:            aiResult.notes,
-    });
-
-    await matchQueue.add('match', { requestId: req.id }, {
-      priority: urgencyToPriority(req.urgency),
+      ai_confidence: aiResult.confidence,
+      notes:         aiResult.notes,
     });
 
     return reply.code(201).send({ request: req, ai_parse: aiResult });
   });
 
-  // GET /requests/nearby — open requests near me (helper view)
+  // GET /requests/nearby
   app.get('/nearby', { preHandler: authenticate }, async (request, reply) => {
     const parsed = nearbyQuerySchema.safeParse(request.query);
     if (!parsed.success) {
@@ -109,7 +94,6 @@ export default async function requestRoutes(app: FastifyInstance) {
 
     const { lat, lng, radius, limit } = parsed.data;
     const radiusKm = Math.min(radius ?? env.DEFAULT_SEARCH_RADIUS_KM, env.MAX_SEARCH_RADIUS_KM);
-
     const requests = await getNearbyRequests({ lat, lng, radiusKm, limit });
     return reply.send({ requests });
   });
@@ -121,15 +105,18 @@ export default async function requestRoutes(app: FastifyInstance) {
     return reply.send({ requests });
   });
 
-  // GET /requests/:id
+  // GET /requests/:id — includes requester name for UI
   app.get('/:id', { preHandler: authenticate }, async (request, reply) => {
     const { id } = request.params as { id: string };
     const req = await getRequestById(id);
     if (!req) return reply.code(404).send({ error: 'Request not found' });
-    return reply.send({ request: req });
+
+    const { pool } = await import('../db/pool');
+    const { rows } = await pool.query(`SELECT name FROM users WHERE id = $1`, [req.requester_id]);
+    return reply.send({ request: { ...req, users: rows[0] ?? { name: 'Unknown' } } });
   });
 
-  // PATCH /requests/:id/fulfill — responder marks request as done (simulated handoff)
+  // PATCH /requests/:id/fulfill
   app.patch('/:id/fulfill', { preHandler: authenticate }, async (request, reply) => {
     const userId = request.user.sub;
     const { id } = request.params as { id: string };
@@ -150,22 +137,11 @@ export default async function requestRoutes(app: FastifyInstance) {
     const { id } = request.params as { id: string };
 
     const req = await getRequestById(id);
-    if (!req)                          return reply.code(404).send({ error: 'Not found' });
-    if (req.requester_id !== userId)   return reply.code(403).send({ error: 'Forbidden' });
-    if (req.status !== 'open')         return reply.code(409).send({ error: `Cannot cancel a ${req.status} request` });
+    if (!req)                        return reply.code(404).send({ error: 'Not found' });
+    if (req.requester_id !== userId) return reply.code(403).send({ error: 'Forbidden' });
+    if (req.status !== 'open')       return reply.code(409).send({ error: `Cannot cancel a ${req.status} request` });
 
     await updateRequestStatus(id, 'cancelled');
     return reply.code(204).send();
   });
-}
-
-function urgencyToPriority(urgency: string): number {
-  // BullMQ: higher number = higher priority
-  const map: Record<string, number> = {
-    emergency: 4,
-    urgent:    3,
-    soon:      2,
-    normal:    1,
-  };
-  return map[urgency] ?? 1;
 }

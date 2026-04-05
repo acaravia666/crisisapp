@@ -8,7 +8,6 @@ import {
 import { getGearById, updateGearStatus } from '../db/queries/gear';
 import { updateRequestStatus } from '../db/queries/requests';
 import { createNotificationsForUsers } from '../db/queries/notifications';
-import { io } from '../websocket/handlers';
 
 const createTransactionSchema = z.object({
   request_id:   z.string().uuid().optional(),
@@ -34,16 +33,14 @@ export default async function transactionRoutes(app: FastifyInstance) {
     }
 
     const gear = await getGearById(parsed.data.gear_item_id);
-    if (!gear)                    return reply.code(404).send({ error: 'Gear item not found' });
+    if (!gear)                      return reply.code(404).send({ error: 'Gear item not found' });
     if (gear.owner_id !== lenderId) return reply.code(403).send({ error: 'You do not own this item' });
     if (gear.status !== 'available') return reply.code(409).send({ error: 'Item is not available' });
 
     const tx = await createTransaction({ lender_id: lenderId, ...parsed.data });
 
-    // Mark gear as lent out
     await updateGearStatus(gear.id, lenderId, 'lent_out');
 
-    // Update request status if linked
     if (parsed.data.request_id) {
       await updateRequestStatus(parsed.data.request_id, 'matched', {
         fulfilled_by_id: lenderId,
@@ -51,18 +48,11 @@ export default async function transactionRoutes(app: FastifyInstance) {
       });
     }
 
-    // Notify borrower
     await createNotificationsForUsers([parsed.data.borrower_id], {
       type:  'transaction_update',
       title: 'Your gear request was accepted!',
       body:  `${gear.name} is available — open the app to coordinate pickup.`,
       data:  { transaction_id: tx.id, screen: 'TransactionDetail' },
-    });
-
-    io?.to(`user:${parsed.data.borrower_id}`).emit('transaction_update', {
-      transactionId: tx.id,
-      status:        'pending',
-      gearName:      gear.name,
     });
 
     return reply.code(201).send({ transaction: tx });
@@ -102,28 +92,19 @@ export default async function transactionRoutes(app: FastifyInstance) {
     const tx = await updateTransactionStatus(id, parsed.data.status, userId);
     if (!tx) return reply.code(404).send({ error: 'Transaction not found or forbidden' });
 
-    // If completed: free up the gear
     if (parsed.data.status === 'completed' || parsed.data.status === 'cancelled') {
       await updateGearStatus(tx.gear_item_id, tx.lender_id, 'available');
-
-      // If a request was linked, mark it fulfilled
       if (tx.request_id && parsed.data.status === 'completed') {
         await updateRequestStatus(tx.request_id, 'fulfilled');
       }
     }
 
-    // Notify the other party
     const otherPartyId = userId === tx.lender_id ? tx.borrower_id : tx.lender_id;
     await createNotificationsForUsers([otherPartyId], {
       type:  'transaction_update',
       title: `Transaction ${parsed.data.status}`,
       body:  `The gear transaction has been marked as ${parsed.data.status}.`,
       data:  { transaction_id: tx.id },
-    });
-
-    io?.to(`user:${otherPartyId}`).emit('transaction_update', {
-      transactionId: tx.id,
-      status:        parsed.data.status,
     });
 
     return reply.send({ transaction: tx });
