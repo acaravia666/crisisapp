@@ -1,6 +1,10 @@
 import { pool } from '../pool';
 import { Transaction, TransactionType, TransactionStatus } from '../../types';
 
+function generatePin(): string {
+  return String(Math.floor(1000 + Math.random() * 9000));
+}
+
 export async function createTransaction(data: {
   request_id?:   string;
   gear_item_id:  string;
@@ -10,10 +14,12 @@ export async function createTransaction(data: {
   agreed_price?: number;
   notes?:        string;
 }): Promise<Transaction> {
+  const delivery_pin = generatePin();
+
   const { rows } = await pool.query<Transaction>(
     `INSERT INTO transactions
-      (request_id, gear_item_id, lender_id, borrower_id, type, agreed_price, notes)
-     VALUES ($1,$2,$3,$4,$5,$6,$7)
+      (request_id, gear_item_id, lender_id, borrower_id, type, agreed_price, notes, delivery_pin)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
      RETURNING *`,
     [
       data.request_id   ?? null,
@@ -23,6 +29,7 @@ export async function createTransaction(data: {
       data.type,
       data.agreed_price ?? null,
       data.notes        ?? null,
+      delivery_pin,
     ]
   );
   return rows[0];
@@ -81,4 +88,55 @@ export async function updateTransactionStatus(
     [status, id, userId]
   );
   return rows[0] ?? null;
+}
+
+// Borrower enters delivery PIN → confirms receipt → status: active, generates return_pin
+export async function confirmDelivery(
+  id: string,
+  borrowerId: string,
+  pin: string
+): Promise<{ ok: boolean; tx?: Transaction; error?: string }> {
+  const { rows: current } = await pool.query<Transaction>(
+    `SELECT * FROM transactions WHERE id = $1 AND borrower_id = $2`,
+    [id, borrowerId]
+  );
+  const tx = current[0];
+  if (!tx)                           return { ok: false, error: 'Transaction not found' };
+  if (tx.status !== 'pending')       return { ok: false, error: 'Transaction is not pending' };
+  if (tx.delivery_pin !== pin)       return { ok: false, error: 'Invalid PIN' };
+
+  const return_pin = generatePin();
+  const { rows } = await pool.query<Transaction>(
+    `UPDATE transactions
+     SET status = 'active', started_at = NOW(), return_pin = $1
+     WHERE id = $2
+     RETURNING *`,
+    [return_pin, id]
+  );
+  return { ok: true, tx: rows[0] };
+}
+
+// Lender enters return PIN → confirms gear received back → status: completed
+export async function confirmReturn(
+  id: string,
+  lenderId: string,
+  pin: string
+): Promise<{ ok: boolean; tx?: Transaction; error?: string }> {
+  const { rows: current } = await pool.query<Transaction>(
+    `SELECT * FROM transactions WHERE id = $1 AND lender_id = $2`,
+    [id, lenderId]
+  );
+  const tx = current[0];
+  if (!tx)                         return { ok: false, error: 'Transaction not found' };
+  if (tx.status !== 'active')      return { ok: false, error: 'Transaction is not active' };
+  if (tx.return_pin !== pin)       return { ok: false, error: 'Invalid PIN' };
+
+  const { rows } = await pool.query<Transaction>(
+    `UPDATE transactions
+     SET status = 'completed', ended_at = NOW()
+     WHERE id = $1
+     RETURNING *`,
+    [id]
+  );
+  return { ok: true, tx: rows[0] };
 }

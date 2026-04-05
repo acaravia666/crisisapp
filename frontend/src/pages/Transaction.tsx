@@ -2,7 +2,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import {
   ShieldCheck, Package, MessageSquare, Loader2,
   CheckCircle, XCircle, Clock, AlertTriangle, User, ArrowLeft,
-  CalendarClock, RotateCcw, DollarSign, TrendingUp,
+  CalendarClock, RotateCcw, DollarSign, TrendingUp, KeyRound, Eye, EyeOff,
 } from 'lucide-react';
 import { useState, useEffect, useRef } from 'react';
 import { apiClient } from '../api/client';
@@ -34,6 +34,8 @@ interface TxData {
   notes?:         string;
   started_at?:    string | null;
   ended_at?:      string | null;
+  delivery_pin?:  string | null;
+  return_pin?:    string | null;
 }
 
 // Parse "Duration: 10 days" or "Duration: 4 hours" from notes
@@ -79,6 +81,9 @@ const Transaction = () => {
   const [txId, setTxId]                   = useState<string | null>(state.transactionId ?? null);
   const [txData, setTxData]               = useState<TxData | null>(null);
   const [actionLoading, setActionLoading] = useState(false);
+  const [pinInput, setPinInput]           = useState('');
+  const [showPin, setShowPin]             = useState(false);
+  const [pinError, setPinError]           = useState('');
   const didInit = useRef(false);
 
   const fetchTx = async (id: string) => {
@@ -123,6 +128,30 @@ const Transaction = () => {
 
     init();
   }, []);
+
+  const confirmPin = async (endpoint: 'confirm-delivery' | 'confirm-return') => {
+    const id = txId ?? txData?.id;
+    if (!id || pinInput.length !== 4) return;
+    setActionLoading(true);
+    setPinError('');
+    try {
+      const res = await apiClient.post(`/transactions/${id}/${endpoint}`, { pin: pinInput });
+      setTxData(res.data.transaction);
+      setPinInput('');
+      if (endpoint === 'confirm-return') {
+        navigate('/rating', {
+          state: {
+            transactionId: id,
+            equipment: txData?.gear_name || state.gearName || state.equipment || 'Gear',
+          },
+        });
+      }
+    } catch (err: any) {
+      setPinError(err.response?.data?.error || 'Incorrect PIN. Try again.');
+    } finally {
+      setActionLoading(false);
+    }
+  };
 
   const updateStatus = async (newStatus: string) => {
     const id = txId ?? txData?.id;
@@ -394,45 +423,138 @@ const Transaction = () => {
         </p>
       </div>
 
-      {/* ── Action buttons ─────────────────────────────────────────────────────── */}
+      {/* ── PIN Handshake Actions ──────────────────────────────────────────────── */}
       {canAct && (
         <div className="fixed bottom-0 left-0 right-0 max-w-[480px] mx-auto px-4 pb-10 pt-4 bg-gradient-to-t from-bg-primary via-bg-primary to-transparent space-y-3 z-50">
 
-          {/* Pending: borrower confirms */}
-          {status === 'pending' && !isLender && (
-            <button
-              onClick={() => updateStatus('active')}
-              disabled={actionLoading}
-              className="w-full bg-green-500 text-black font-black py-5 rounded-[2.5rem] flex items-center justify-center gap-3 text-base shadow-2xl shadow-green-500/20 disabled:opacity-50 active:scale-95 transition-all"
-            >
-              {actionLoading ? <Loader2 size={22} className="animate-spin" /> : <CheckCircle size={22} />}
-              {actionLoading ? 'Confirming...' : 'Confirm & Start Rental'}
-            </button>
-          )}
-
-          {/* Pending: lender waits */}
+          {/* ── PENDING: Lender shows delivery PIN ── */}
           {status === 'pending' && isLender && (
-            <div className="w-full bg-yellow-500/10 border border-yellow-500/20 text-yellow-400 font-black py-5 rounded-[2.5rem] flex items-center justify-center gap-3 text-base">
-              <Clock size={22} /> Waiting for {otherName}...
+            <div className="space-y-3">
+              <div className="glass-panel border-yellow-500/20 py-5 space-y-3">
+                <p className="text-[10px] text-yellow-400 font-black uppercase tracking-widest text-center flex items-center justify-center gap-1.5">
+                  <KeyRound size={12} /> Delivery Code — Show to {otherName}
+                </p>
+                <div className="flex items-center justify-center gap-3">
+                  <p className="text-5xl font-black tracking-[0.3em] text-white">
+                    {showPin ? (txData.delivery_pin ?? '----') : '••••'}
+                  </p>
+                  <button
+                    onClick={() => setShowPin(v => !v)}
+                    className="w-10 h-10 rounded-full bg-white/5 border border-white/10 flex items-center justify-center"
+                  >
+                    {showPin ? <EyeOff size={16} /> : <Eye size={16} />}
+                  </button>
+                </div>
+                <p className="text-[10px] text-muted text-center font-bold">
+                  {otherName} enters this code to confirm receipt
+                </p>
+              </div>
             </div>
           )}
 
-          {/* Active: lender confirms return */}
-          {status === 'active' && isLender && (
-            <button
-              onClick={() => updateStatus('completed')}
-              disabled={actionLoading}
-              className="w-full bg-white text-black font-black py-5 rounded-[2.5rem] flex items-center justify-center gap-3 text-base shadow-2xl shadow-white/10 disabled:opacity-50 active:scale-95 transition-all"
-            >
-              {actionLoading ? <Loader2 size={22} className="animate-spin" /> : <RotateCcw size={22} />}
-              {actionLoading ? 'Confirming...' : 'Gear Returned — Close Deal'}
-            </button>
+          {/* ── PENDING: Borrower enters delivery PIN ── */}
+          {status === 'pending' && !isLender && (
+            <div className="space-y-3">
+              <div className="glass-panel border-green-500/20 py-5 space-y-4">
+                <p className="text-[10px] text-green-400 font-black uppercase tracking-widest text-center flex items-center justify-center gap-1.5">
+                  <KeyRound size={12} /> Enter {otherName}'s Delivery Code
+                </p>
+                <div className="flex gap-2">
+                  {[0,1,2,3].map(i => (
+                    <div key={i} className={`flex-1 h-14 rounded-2xl border flex items-center justify-center text-2xl font-black transition-all ${pinInput[i] ? 'bg-green-500/10 border-green-500/40 text-white' : 'bg-white/5 border-white/10 text-muted'}`}>
+                      {pinInput[i] ?? '·'}
+                    </div>
+                  ))}
+                </div>
+                {pinError && <p className="text-xs text-red-400 font-bold text-center">{pinError}</p>}
+                {/* Numpad */}
+                <div className="grid grid-cols-3 gap-2">
+                  {['1','2','3','4','5','6','7','8','9','','0','⌫'].map((k) => (
+                    <button
+                      key={k}
+                      disabled={!k || actionLoading}
+                      onClick={() => {
+                        if (k === '⌫') { setPinInput(p => p.slice(0,-1)); setPinError(''); }
+                        else if (pinInput.length < 4) { setPinInput(p => p + k); setPinError(''); }
+                      }}
+                      className={`h-12 rounded-2xl text-lg font-black transition-all active:scale-90 ${k ? 'bg-white/5 border border-white/10 hover:bg-white/10' : 'pointer-events-none'}`}
+                    >
+                      {k}
+                    </button>
+                  ))}
+                </div>
+                <button
+                  onClick={() => confirmPin('confirm-delivery')}
+                  disabled={pinInput.length !== 4 || actionLoading}
+                  className="w-full bg-green-500 text-black font-black py-4 rounded-2xl flex items-center justify-center gap-2 disabled:opacity-40 active:scale-95 transition-all"
+                >
+                  {actionLoading ? <Loader2 size={20} className="animate-spin" /> : <CheckCircle size={20} />}
+                  {actionLoading ? 'Verifying...' : 'Confirm Receipt'}
+                </button>
+              </div>
+            </div>
           )}
 
-          {/* Active: borrower sees info (lender closes the deal) */}
+          {/* ── ACTIVE: Borrower shows return PIN ── */}
           {status === 'active' && !isLender && (
-            <div className="w-full bg-accent-cyan/10 border border-accent-cyan/20 text-accent-cyan font-bold py-4 rounded-[2.5rem] flex items-center justify-center gap-2 text-sm px-4 text-center">
-              <RotateCcw size={18} /> Return the gear · Ask {otherName} to close the deal
+            <div className="glass-panel border-accent-cyan/20 py-5 space-y-3">
+              <p className="text-[10px] text-accent-cyan font-black uppercase tracking-widest text-center flex items-center justify-center gap-1.5">
+                <KeyRound size={12} /> Return Code — Show to {otherName}
+              </p>
+              <div className="flex items-center justify-center gap-3">
+                <p className="text-5xl font-black tracking-[0.3em] text-white">
+                  {showPin ? (txData.return_pin ?? '----') : '••••'}
+                </p>
+                <button
+                  onClick={() => setShowPin(v => !v)}
+                  className="w-10 h-10 rounded-full bg-white/5 border border-white/10 flex items-center justify-center"
+                >
+                  {showPin ? <EyeOff size={16} /> : <Eye size={16} />}
+                </button>
+              </div>
+              <p className="text-[10px] text-muted text-center font-bold">
+                Give this code to {otherName} when you return the gear
+              </p>
+            </div>
+          )}
+
+          {/* ── ACTIVE: Lender enters return PIN ── */}
+          {status === 'active' && isLender && (
+            <div className="glass-panel border-white/20 py-5 space-y-4">
+              <p className="text-[10px] text-white font-black uppercase tracking-widest text-center flex items-center justify-center gap-1.5">
+                <RotateCcw size={12} /> Enter {otherName}'s Return Code
+              </p>
+              <div className="flex gap-2">
+                {[0,1,2,3].map(i => (
+                  <div key={i} className={`flex-1 h-14 rounded-2xl border flex items-center justify-center text-2xl font-black transition-all ${pinInput[i] ? 'bg-white/10 border-white/40 text-white' : 'bg-white/5 border-white/10 text-muted'}`}>
+                    {pinInput[i] ?? '·'}
+                  </div>
+                ))}
+              </div>
+              {pinError && <p className="text-xs text-red-400 font-bold text-center">{pinError}</p>}
+              <div className="grid grid-cols-3 gap-2">
+                {['1','2','3','4','5','6','7','8','9','','0','⌫'].map((k) => (
+                  <button
+                    key={k}
+                    disabled={!k || actionLoading}
+                    onClick={() => {
+                      if (k === '⌫') { setPinInput(p => p.slice(0,-1)); setPinError(''); }
+                      else if (pinInput.length < 4) { setPinInput(p => p + k); setPinError(''); }
+                    }}
+                    className={`h-12 rounded-2xl text-lg font-black transition-all active:scale-90 ${k ? 'bg-white/5 border border-white/10 hover:bg-white/10' : 'pointer-events-none'}`}
+                  >
+                    {k}
+                  </button>
+                ))}
+              </div>
+              <button
+                onClick={() => confirmPin('confirm-return')}
+                disabled={pinInput.length !== 4 || actionLoading}
+                className="w-full bg-white text-black font-black py-4 rounded-2xl flex items-center justify-center gap-2 disabled:opacity-40 active:scale-95 transition-all"
+              >
+                {actionLoading ? <Loader2 size={20} className="animate-spin" /> : <CheckCircle size={20} />}
+                {actionLoading ? 'Verifying...' : 'Confirm Return & Close Deal'}
+              </button>
             </div>
           )}
 
@@ -453,7 +575,7 @@ const Transaction = () => {
               disabled={actionLoading}
               className="flex-1 flex items-center justify-center gap-2 bg-red-500/10 border border-red-500/20 rounded-2xl py-4 text-sm font-bold text-red-400 disabled:opacity-50"
             >
-              <XCircle size={16} /> Cancel Deal
+              <XCircle size={16} /> Cancel
             </button>
           </div>
         </div>

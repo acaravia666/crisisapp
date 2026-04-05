@@ -4,6 +4,7 @@ import { authenticate } from '../middleware/authenticate';
 import {
   createTransaction, getTransactionById, getTransactionByRequestId,
   getTransactionsByUser, updateTransactionStatus,
+  confirmDelivery, confirmReturn,
 } from '../db/queries/transactions';
 import { getGearById, updateGearStatus } from '../db/queries/gear';
 import { updateRequestStatus } from '../db/queries/requests';
@@ -86,6 +87,57 @@ export default async function transactionRoutes(app: FastifyInstance) {
     if (tx.lender_id !== userId && tx.borrower_id !== userId) {
       return reply.code(403).send({ error: 'Forbidden' });
     }
+
+    return reply.send({ transaction: tx });
+  });
+
+  // POST /transactions/:id/confirm-delivery — borrower enters delivery PIN
+  app.post('/:id/confirm-delivery', { preHandler: authenticate }, async (request, reply) => {
+    const borrowerId = request.user.sub;
+    const { id } = request.params as { id: string };
+    const { pin } = request.body as { pin?: string };
+
+    if (!pin || !/^\d{4}$/.test(pin)) {
+      return reply.code(400).send({ error: 'PIN must be 4 digits' });
+    }
+
+    const result = await confirmDelivery(id, borrowerId, pin);
+    if (!result.ok) return reply.code(400).send({ error: result.error });
+
+    const tx = result.tx!;
+    await createNotificationsForUsers([tx.lender_id], {
+      type:  'transaction_update',
+      title: 'Delivery confirmed!',
+      body:  'The borrower confirmed receipt. Rental clock is running.',
+      data:  { transaction_id: tx.id },
+    });
+
+    return reply.send({ transaction: tx });
+  });
+
+  // POST /transactions/:id/confirm-return — lender enters return PIN
+  app.post('/:id/confirm-return', { preHandler: authenticate }, async (request, reply) => {
+    const lenderId = request.user.sub;
+    const { id } = request.params as { id: string };
+    const { pin } = request.body as { pin?: string };
+
+    if (!pin || !/^\d{4}$/.test(pin)) {
+      return reply.code(400).send({ error: 'PIN must be 4 digits' });
+    }
+
+    const result = await confirmReturn(id, lenderId, pin);
+    if (!result.ok) return reply.code(400).send({ error: result.error });
+
+    const tx = result.tx!;
+    await updateGearStatus(tx.gear_item_id, tx.lender_id, 'available');
+    if (tx.request_id) await updateRequestStatus(tx.request_id, 'fulfilled');
+
+    await createNotificationsForUsers([tx.borrower_id], {
+      type:  'transaction_update',
+      title: 'Return confirmed!',
+      body:  'The lender confirmed the gear was returned. Deal closed.',
+      data:  { transaction_id: tx.id },
+    });
 
     return reply.send({ transaction: tx });
   });

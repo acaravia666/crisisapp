@@ -94,19 +94,21 @@ export interface GearRequest {
 }
 
 export interface Transaction {
-  id:            string;
-  request_id:    string | null;
-  gear_item_id:  string;
-  lender_id:     string;
-  borrower_id:   string;
-  type:          TransactionType;
-  status:        TransactionStatus;
-  agreed_price:  number | null;
-  started_at:    Date | null;
-  ended_at:      Date | null;
-  notes:         string | null;
-  created_at:    Date;
-  updated_at:    Date;
+  id:               string;
+  request_id:       string | null;
+  gear_item_id:     string;
+  lender_id:        string;
+  borrower_id:      string;
+  type:             TransactionType;
+  status:           TransactionStatus;
+  agreed_price:     number | null;
+  started_at:       Date | null;
+  ended_at:         Date | null;
+  notes:            string | null;
+  delivery_pin:     string | null;
+  return_pin:       string | null;
+  created_at:       Date;
+  updated_at:       Date;
 }
 
 export interface Message {
