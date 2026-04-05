@@ -6,6 +6,9 @@ export const pool = new Pool({
   max:              20,
   idleTimeoutMillis: 30_000,
   connectionTimeoutMillis: 5_000,
+  ssl: {
+    rejectUnauthorized: false // Required for Neon/Vercel Postgres unless a CA is provided
+  },
 });
 
 pool.on('error', (err) => {
