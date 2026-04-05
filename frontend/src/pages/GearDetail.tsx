@@ -60,8 +60,8 @@ const GearDetail = () => {
     try {
       await apiClient.delete(`/gear/${id}`);
       navigate('/inventory', { replace: true });
-    } catch {
-      setError('Could not delete item. Try again.');
+    } catch (err: any) {
+      setError(err.response?.data?.error || 'Could not delete item. Try again.');
       setConfirmDelete(false);
     } finally {
       setDeleting(false);

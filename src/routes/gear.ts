@@ -116,6 +116,21 @@ export default async function gearRoutes(app: FastifyInstance) {
     const userId = request.user.sub;
     const { id } = request.params as { id: string };
 
+    const { pool } = await import('../db/pool');
+
+    // Block deletion if there's an active/pending transaction
+    const { rowCount: activeTxCount } = await pool.query(
+      `SELECT 1 FROM transactions WHERE gear_item_id = $1 AND status IN ('pending','active') LIMIT 1`,
+      [id]
+    );
+    if ((activeTxCount ?? 0) > 0) {
+      return reply.code(409).send({ error: 'Cannot delete gear with an active transaction. Complete or cancel the deal first.' });
+    }
+
+    // Clear FK references from completed/cancelled transactions and requests
+    await pool.query(`DELETE FROM transactions WHERE gear_item_id = $1 AND status IN ('completed','cancelled','disputed')`, [id]);
+    await pool.query(`UPDATE gear_requests SET matched_gear_id = NULL WHERE matched_gear_id = $1`, [id]);
+
     const deleted = await deleteGearItem(id, userId);
     if (!deleted) return reply.code(404).send({ error: 'Gear item not found or not yours' });
     return reply.code(204).send();
