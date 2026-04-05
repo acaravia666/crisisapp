@@ -256,105 +256,168 @@ const RequestDetail = () => {
       {/* Gear Selection & Terms Modal */}
       {showGearSelect && (
         <div className="fixed inset-0 z-[200] bg-black/60 backdrop-blur-sm animate-fade-in flex flex-col justify-end">
-           <div className="absolute inset-0" onClick={() => setShowGearSelect(false)} />
-           <div className="relative bg-[#111] w-full max-w-[480px] mx-auto rounded-t-[2.5rem] border-t border-white/10 animate-slide-up flex flex-col" style={{ maxHeight: '85vh', paddingBottom: 'env(safe-area-inset-bottom)' }}>
-              
-              <div className="px-6 py-6 border-b border-white/5 flex justify-between items-center">
-                <h2 className="text-xl font-black">{step === 'pick' ? 'Select Gear to Offer' : 'Set Deal Terms'}</h2>
-                {step === 'terms' && (
-                  <button onClick={() => setStep('pick')} className="text-xs font-bold text-muted uppercase">Back</button>
-                )}
-              </div>
+          <div className="absolute inset-0" onClick={() => setShowGearSelect(false)} />
+          <div
+            className="relative bg-[#111] w-full max-w-[480px] mx-auto rounded-t-[2.5rem] border-t border-white/10 animate-slide-up flex flex-col"
+            style={{ maxHeight: '88vh', paddingBottom: 'env(safe-area-inset-bottom)' }}
+          >
+            {/* Header */}
+            <div className="px-6 pt-6 pb-4 flex items-center justify-between">
+              {step === 'terms' ? (
+                <button onClick={() => setStep('pick')} className="flex items-center gap-1.5 text-xs font-black text-muted uppercase tracking-widest">
+                  <ChevronRight size={14} className="rotate-180" /> Back
+                </button>
+              ) : (
+                <div />
+              )}
+              <h2 className="text-base font-black absolute left-1/2 -translate-x-1/2">
+                {step === 'pick' ? 'Choose Gear' : 'Deal Terms'}
+              </h2>
+              <button
+                onClick={() => setShowGearSelect(false)}
+                className="w-8 h-8 rounded-full bg-white/5 border border-white/10 flex items-center justify-center"
+              >
+                <X size={16} />
+              </button>
+            </div>
 
-              <div className="flex-1 overflow-y-auto px-6 py-6 scrollbar-hide">
-                {step === 'pick' ? (
-                  <div className="space-y-4">
-                    {loadingGear ? <div className="flex justify-center py-12"><Loader2 size={24} className="animate-spin text-accent-cyan" /></div>
-                    : myGear.length === 0 ? <div className="text-center py-12"><p className="text-secondary">No gear in inventory.</p></div>
-                    : myGear.map(gear => (
-                      <div key={gear.id} onClick={() => setSelectedGearId(gear.id)} className={`flex items-center gap-3 p-3 rounded-2xl border transition-all ${selectedGearId === gear.id ? 'bg-white/10 border-white/30' : 'bg-white/5 border-white/5 opacity-60'}`}>
-                        <div className="w-12 h-12 rounded-xl bg-gray-800 shrink-0 overflow-hidden">{gear.photo_urls?.[0] && <img src={gear.photo_urls[0]} className="w-full h-full object-cover" />}</div>
-                        <div className="flex-1 min-w-0"><h4 className="text-sm font-bold truncate">{gear.name}</h4><p className="text-[10px] text-muted uppercase tracking-widest">{gear.category}</p></div>
-                        {selectedGearId === gear.id && <Check size={18} className="text-white" />}
+            {/* Step dots */}
+            <div className="flex justify-center gap-1.5 pb-4">
+              <div className={`h-1 rounded-full transition-all ${step === 'pick' ? 'w-6 bg-white' : 'w-2 bg-white/20'}`} />
+              <div className={`h-1 rounded-full transition-all ${step === 'terms' ? 'w-6 bg-white' : 'w-2 bg-white/20'}`} />
+            </div>
+
+            <div className="flex-1 overflow-y-auto px-6 pb-4 scrollbar-hide">
+              {step === 'pick' ? (
+                <div className="space-y-3">
+                  {loadingGear
+                    ? <div className="flex justify-center py-12"><Loader2 size={24} className="animate-spin text-accent-cyan" /></div>
+                    : myGear.length === 0
+                      ? <div className="text-center py-12"><p className="text-secondary text-sm">No gear in inventory.</p></div>
+                      : myGear.map(gear => (
+                        <div
+                          key={gear.id}
+                          onClick={() => setSelectedGearId(gear.id)}
+                          className={`flex items-center gap-3 p-3 rounded-2xl border transition-all cursor-pointer ${selectedGearId === gear.id ? 'bg-white/10 border-white/30' : 'bg-white/5 border-white/5'}`}
+                        >
+                          <div className="w-12 h-12 rounded-xl bg-gray-800 shrink-0 overflow-hidden">
+                            {gear.photo_urls?.[0]
+                              ? <img src={gear.photo_urls[0]} className="w-full h-full object-cover" />
+                              : <div className="w-full h-full flex items-center justify-center"><Package size={18} className="text-muted" /></div>}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <h4 className="text-sm font-bold truncate">{gear.name}</h4>
+                            <p className="text-[10px] text-muted uppercase tracking-widest">{gear.category}</p>
+                          </div>
+                          <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all ${selectedGearId === gear.id ? 'bg-white border-white' : 'border-white/20'}`}>
+                            {selectedGearId === gear.id && <Check size={12} className="text-black" strokeWidth={3} />}
+                          </div>
+                        </div>
+                      ))
+                  }
+                </div>
+              ) : (
+                <div className="space-y-5 animate-fade-in">
+                  {/* Selected gear summary */}
+                  {currentSelectedGear && (
+                    <div className="flex items-center gap-3 p-3 rounded-2xl bg-white/5 border border-white/10">
+                      <div className="w-10 h-10 rounded-xl bg-gray-800 shrink-0 overflow-hidden">
+                        {currentSelectedGear.photo_urls?.[0]
+                          ? <img src={currentSelectedGear.photo_urls[0]} className="w-full h-full object-cover" />
+                          : <div className="w-full h-full flex items-center justify-center"><Package size={14} className="text-muted" /></div>}
                       </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="space-y-8 animate-fade-in">
-                    {/* Price Section */}
-                    <div className="space-y-3">
-                       <label className="text-xs font-black text-muted uppercase tracking-[0.2em] flex items-center gap-2">
-                          <DollarSign size={14} className="text-green-500" /> 
-                          {request.action === 'sell' ? 'Selling Price' : 'Rental Price'}
-                       </label>
-                       <div className="relative">
-                          <input 
-                            type="number"
-                            value={price}
-                            onChange={(e) => setPrice(e.target.value)}
-                            className="w-full bg-white/5 border border-white/10 rounded-2xl py-4 pl-12 pr-4 text-2xl font-black focus:outline-none focus:border-green-500 transition-colors"
-                            placeholder="0.00"
-                          />
-                          <span className="absolute left-6 top-1/2 -translate-y-1/2 text-xl font-bold text-secondary">$</span>
-                       </div>
-                    </div>
-
-                    {/* Duration Section (only for rent/lend) */}
-                    {request.action !== 'sell' && (
-                      <div className="space-y-4">
-                         <label className="text-xs font-black text-muted uppercase tracking-[0.2em] flex items-center gap-2">
-                            <Clock size={14} className="text-accent-cyan" /> Duration
-                         </label>
-                         <div className="flex gap-3">
-                            <input 
-                              type="number"
-                              value={duration}
-                              onChange={(e) => setDuration(e.target.value)}
-                              className="flex-1 bg-white/5 border border-white/10 rounded-2xl py-4 px-6 text-xl font-black focus:outline-none"
-                            />
-                            <div className="flex bg-white/5 rounded-2xl p-1 border border-white/10">
-                               {['hours', 'days'].map((u) => (
-                                 <button
-                                   key={u}
-                                   onClick={() => setUnit(u as any)}
-                                   className={`px-6 rounded-xl text-xs font-black uppercase transition-all ${unit === u ? 'bg-white text-black shadow-lg' : 'text-muted'}`}
-                                 >
-                                   {u}
-                                 </button>
-                               ))}
-                            </div>
-                         </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-black truncate">{currentSelectedGear.name}</p>
+                        <p className="text-[10px] text-muted uppercase tracking-widest">{currentSelectedGear.category}</p>
                       </div>
-                    )}
+                      <span className="text-[10px] font-black uppercase text-accent-cyan bg-accent-cyan/10 px-2 py-1 rounded-lg">Selected</span>
+                    </div>
+                  )}
 
-                    <div className="p-4 bg-white/5 border border-white/5 rounded-2xl">
-                       <p className="text-[10px] text-muted font-bold leading-relaxed">
-                          This is a {request.action} offer. Pulse app takes 0% commission during verified crises.
-                       </p>
+                  {/* Price */}
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black text-muted uppercase tracking-[0.2em] flex items-center gap-1.5">
+                      <DollarSign size={12} className="text-green-500" />
+                      {request.action === 'sell' ? 'Selling Price' : request.action === 'rent' ? 'Rental Price' : 'Price (0 = free)'}
+                    </label>
+                    <div className="flex items-center bg-white/5 border border-white/10 rounded-2xl overflow-hidden focus-within:border-green-500/50 transition-colors">
+                      <span className="pl-4 pr-2 text-sm font-bold text-secondary">$</span>
+                      <input
+                        type="number"
+                        value={price}
+                        onChange={(e) => setPrice(e.target.value)}
+                        className="flex-1 bg-transparent py-4 pr-4 text-base font-bold focus:outline-none"
+                        placeholder="0.00"
+                        min="0"
+                      />
                     </div>
                   </div>
-                )}
-              </div>
 
-              <div className="p-6">
-                 {step === 'pick' ? (
-                   <button 
-                    onClick={() => setStep('terms')} 
-                    disabled={!selectedGearId} 
-                    className="w-full bg-white text-black font-black py-4 rounded-2xl disabled:opacity-30 flex items-center justify-center gap-2 active:scale-95 transition-transform"
-                   >
-                     Next Step <ChevronRight size={18} />
-                   </button>
-                 ) : (
-                   <button 
-                    onClick={handleConfirmOffer} 
-                    className="w-full bg-green-500 text-black font-black py-4 rounded-2xl flex items-center justify-center gap-2 shadow-xl shadow-green-500/20 active:scale-95 transition-transform"
-                   >
-                     Confirm & Initiate Deal
-                   </button>
-                 )}
-              </div>
-           </div>
+                  {/* Duration — only for rent/lend */}
+                  {request.action !== 'sell' && (
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-black text-muted uppercase tracking-[0.2em] flex items-center gap-1.5">
+                        <Clock size={12} className="text-accent-cyan" /> Duration
+                      </label>
+                      <div className="flex items-center gap-3">
+                        {/* Stepper */}
+                        <div className="flex items-center gap-2 bg-white/5 border border-white/10 rounded-2xl px-3 py-2">
+                          <button
+                            type="button"
+                            onClick={() => setDuration(d => String(Math.max(1, parseInt(d || '1') - 1)))}
+                            className="w-8 h-8 rounded-xl bg-white/10 flex items-center justify-center text-lg font-black active:scale-90 transition-transform"
+                          >−</button>
+                          <span className="w-8 text-center text-base font-black">{duration}</span>
+                          <button
+                            type="button"
+                            onClick={() => setDuration(d => String(parseInt(d || '1') + 1))}
+                            className="w-8 h-8 rounded-xl bg-white/10 flex items-center justify-center text-lg font-black active:scale-90 transition-transform"
+                          >+</button>
+                        </div>
+                        {/* Unit toggle */}
+                        <div className="flex-1 flex bg-white/5 border border-white/10 rounded-2xl p-1">
+                          {(['hours', 'days'] as const).map((u) => (
+                            <button
+                              key={u}
+                              type="button"
+                              onClick={() => setUnit(u)}
+                              className={`flex-1 py-2.5 rounded-xl text-xs font-black uppercase transition-all ${unit === u ? 'bg-white text-black shadow' : 'text-muted'}`}
+                            >
+                              {u}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  <p className="text-[10px] text-muted/60 font-bold text-center">
+                    0% commission · Crisis Mode Active
+                  </p>
+                </div>
+              )}
+            </div>
+
+            {/* Footer CTA */}
+            <div className="px-6 pb-6 pt-2">
+              {step === 'pick' ? (
+                <button
+                  onClick={() => setStep('terms')}
+                  disabled={!selectedGearId}
+                  className="w-full bg-white text-black font-black py-4 rounded-2xl disabled:opacity-30 flex items-center justify-center gap-2 active:scale-95 transition-transform"
+                >
+                  Next <ChevronRight size={18} />
+                </button>
+              ) : (
+                <button
+                  onClick={handleConfirmOffer}
+                  className="w-full bg-green-500 text-black font-black py-4 rounded-2xl flex items-center justify-center gap-2 shadow-xl shadow-green-500/20 active:scale-95 transition-transform"
+                >
+                  <Check size={18} strokeWidth={3} /> Confirm Deal
+                </button>
+              )}
+            </div>
+          </div>
         </div>
       )}
     </div>
