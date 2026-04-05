@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import {
   ShieldAlert, Zap, MapPin, Loader2, Search,
   Speaker, Mic, Cable, Disc, Wrench, ArrowRight,
-  X, Bell, BellOff, CheckCheck,
+  X, Bell, BellOff, CheckCheck, Handshake, Package, ChevronRight
 } from 'lucide-react';
 import { useAuth } from '../store/AuthContext';
 import { apiClient } from '../api/client';
@@ -25,6 +25,19 @@ interface NearbyGear {
   can_lend:   boolean;
   can_sell:   boolean;
   rent_price?: number;
+  sell_price?: number;
+}
+
+interface Transaction {
+  id:         string;
+  status:     string;
+  gear_name?: string;
+  gear_item_id: string;
+  request_id?: string;
+  borrower_id: string;
+  lender_id:   string;
+  type:       string;
+  agreed_price: number;
 }
 
 interface Notification {
@@ -57,12 +70,7 @@ async function reverseGeocode(lat: number, lng: number): Promise<string> {
       { headers: { 'Accept-Language': 'en' } }
     );
     const data = await res.json();
-    const city =
-      data.address?.city ||
-      data.address?.town ||
-      data.address?.village ||
-      data.address?.county ||
-      'Nearby';
+    const city = data.address?.city || data.address?.town || data.address?.village || data.address?.county || 'Nearby';
     const country = data.address?.country_code?.toUpperCase() ?? '';
     return country ? `${city}, ${country}` : city;
   } catch {
@@ -129,6 +137,7 @@ const Home = () => {
   const [nearby, setNearby]               = useState<NearbyRequest[]>([]);
   const [loadingNearby, setLoadingNearby] = useState(true);
   const [nearbyGear, setNearbyGear]       = useState<NearbyGear[]>([]);
+  const [activeDeals, setActiveDeals]     = useState<Transaction[]>([]);
   const [searchQuery, setSearchQuery]     = useState('');
 
   // ── Notifications ────────────────────────────────────────────────────────
@@ -145,7 +154,6 @@ const Home = () => {
       const notifs: Notification[] = res.data.notifications || [];
       setNotifications(notifs);
       setUnreadCount(0);
-      // Mark all as read
       if (notifs.some(n => !n.is_read)) {
         apiClient.post('/users/me/notifications/read').catch(() => {});
       }
@@ -156,14 +164,11 @@ const Home = () => {
     }
   }, []);
 
-  // Fetch unread count on mount
   useEffect(() => {
-    apiClient.get('/users/me/notifications?limit=50')
-      .then(res => {
-        const notifs: Notification[] = res.data.notifications || [];
-        setUnreadCount(notifs.filter(n => !n.is_read).length);
-      })
-      .catch(() => {});
+    apiClient.get('/users/me/notifications?limit=50').then(res => {
+      const notifs: Notification[] = res.data.notifications || [];
+      setUnreadCount(notifs.filter(n => !n.is_read).length);
+    }).catch(() => {});
   }, []);
 
   // ── Geolocation ──────────────────────────────────────────────────────────
@@ -179,38 +184,36 @@ const Home = () => {
         saveCoords(c);
         const label = await reverseGeocode(c.lat, c.lng);
         setLocationLabel(label);
-        // Persist location to DB so gear/nearby query works
-        apiClient.post('/users/me/location', {
-          lat: c.lat,
-          lng: c.lng,
-          accuracy_m: pos.coords.accuracy ?? undefined,
-        }).catch(() => {});
+        apiClient.post('/users/me/location', { lat: c.lat, lng: c.lng, accuracy_m: pos.coords.accuracy ?? undefined }).catch(() => {});
       },
-      () => {
-        reverseGeocode(coords.lat, coords.lng).then(setLocationLabel);
-      },
+      () => { reverseGeocode(coords.lat, coords.lng).then(setLocationLabel); },
       { timeout: 8000, maximumAge: 5 * 60 * 1000 }
     );
   }, []);
 
-  // ── Nearby requests ───────────────────────────────────────────────────────
+  // ── Data Fetching ─────────────────────────────────────────────────────────
   useEffect(() => {
-    setLoadingNearby(true);
-    const { lat, lng } = coords;
-    // Fetch nearby requests
-    apiClient
-      .get(`/requests/nearby?lat=${lat}&lng=${lng}&radius=10&limit=3`)
-      .then(res => setNearby(res.data.requests || []))
-      .catch(() => setNearby([]))
-      .finally(() => setLoadingNearby(false));
-    // Fetch nearby gear
-    apiClient
-      .get(`/gear/nearby?lat=${lat}&lng=${lng}&radius=10&limit=6`)
-      .then(res => setNearbyGear(res.data.items || []))
-      .catch(() => setNearbyGear([]));
+    const fetchData = async () => {
+      const { lat, lng } = coords;
+      setLoadingNearby(true);
+      try {
+        const [reqRes, gearRes, txRes] = await Promise.all([
+          apiClient.get(`/requests/nearby?lat=${lat}&lng=${lng}&radius=10&limit=3`),
+          apiClient.get(`/gear/nearby?lat=${lat}&lng=${lng}&radius=10&limit=10`),
+          apiClient.get('/transactions/mine')
+        ]);
+        setNearby(reqRes.data.requests || []);
+        setNearbyGear(gearRes.data.items || []);
+        setActiveDeals((txRes.data.transactions || []).filter((tx: Transaction) => tx.status === 'pending' || tx.status === 'active'));
+      } catch {
+        // quiet fail
+      } finally {
+        setLoadingNearby(false);
+      }
+    };
+    fetchData();
   }, [coords.lat, coords.lng]);
 
-  // ── Search ────────────────────────────────────────────────────────────────
   const handleSearch = useCallback((q: string) => {
     const query = q.trim();
     if (!query) return;
@@ -218,37 +221,24 @@ const Home = () => {
   }, [navigate]);
 
   return (
-    <div className="page-container flex flex-col h-full bg-primary">
+    <div className="page-container flex flex-col h-full bg-primary relative">
 
       {/* Header */}
       <header className="flex justify-between items-center mb-6 mt-4 animate-slide-up stagger-1">
         <div className="flex items-center gap-2">
           <div className="w-10 h-10 rounded-full bg-secondary border border-bg-glass-border flex items-center justify-center">
-            <span className="text-sm font-bold text-white uppercase">
-              {user?.name?.charAt(0) || '?'}
-            </span>
+            <span className="text-sm font-bold text-white uppercase">{user?.name?.charAt(0) || '?'}</span>
           </div>
           <div className="flex flex-col">
             <span className="text-sm font-bold">{user?.name || 'Musician'}</span>
-            <span className="text-xs text-secondary flex items-center gap-1">
-              <MapPin size={12} className="text-accent-cyan" />
-              {locationLabel}
-            </span>
+            <span className="text-xs text-secondary flex items-center gap-1"><MapPin size={12} className="text-accent-cyan" /> {locationLabel}</span>
           </div>
         </div>
-
-        {/* Notifications button */}
-        <button
-          onClick={openNotifications}
-          className="w-10 h-10 rounded-full bg-secondary flex items-center justify-center relative active-press"
-          aria-label="Notifications"
-        >
+        <button onClick={openNotifications} className="w-10 h-10 rounded-full bg-secondary flex items-center justify-center relative active-press">
           <Zap size={20} className="text-urgency-soon" />
           {unreadCount > 0 && (
             <div className="absolute -top-1 -right-1 w-4 h-4 bg-urgency-emergency rounded-full border-2 border-bg-primary flex items-center justify-center">
-              <span className="text-[8px] font-black text-white leading-none">
-                {unreadCount > 9 ? '9+' : unreadCount}
-              </span>
+              <span className="text-[8px] font-black text-white leading-none">{unreadCount > 9 ? '9+' : unreadCount}</span>
             </div>
           )}
         </button>
@@ -256,59 +246,65 @@ const Home = () => {
 
       {/* Search */}
       <section className="mb-8 animate-slide-up stagger-2">
-        <form
-          onSubmit={e => { e.preventDefault(); handleSearch(searchQuery); }}
-          className="relative group"
-        >
-          <Search
-            className="absolute left-4 top-1/2 -translate-y-1/2 text-muted transition-colors group-focus-within:text-accent-cyan"
-            size={20}
-          />
+        <form onSubmit={e => { e.preventDefault(); handleSearch(searchQuery); }} className="relative group">
+          <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-muted transition-colors group-focus-within:text-accent-cyan" size={20} />
           <input
             type="text"
-            placeholder="Search: 'XLR Cable', '9V Battery', 'Snare'..."
+            placeholder="Search: 'Adapter', '9V', 'XLR'..."
             className="w-full bg-secondary border border-bg-glass-border rounded-2xl py-4 pl-12 pr-4 text-sm focus:outline-none focus:ring-2 focus:ring-accent-cyan/50 transition-all shadow-lg"
             value={searchQuery}
             onChange={e => setSearchQuery(e.target.value)}
-            aria-label="Search equipment"
           />
         </form>
-        <div className="flex gap-2 mt-3 overflow-x-auto pb-1 no-scrollbar">
-          {['Cables', 'Adapter', '9V Battery', 'Snare', 'DI Box'].map(tag => (
-            <button
-              key={tag}
-              type="button"
-              onClick={() => handleSearch(tag)}
-              className="px-3 py-1.5 rounded-full bg-tertiary/50 border border-bg-glass-border text-[10px] font-bold text-secondary hover:text-white whitespace-nowrap transition-colors active-press"
-            >
-              {tag}
-            </button>
-          ))}
+      </section>
+
+      {/* ACTIVE DEALS SECTION */}
+      <section className="mb-10 animate-slide-up stagger-3">
+        <div className="flex justify-between items-center mb-4 px-1">
+          <h2 className="text-xs font-black uppercase tracking-[0.2em] text-muted flex items-center gap-2">
+            <Handshake size={14} className="text-green-500" /> Active Deals v2
+          </h2>
+          {activeDeals.length > 0 && <span className="badge badge-emergency">{activeDeals.length} LIVE</span>}
         </div>
+        
+        {activeDeals.length > 0 ? (
+          <div className="flex gap-4 overflow-x-auto pb-4 no-scrollbar -mx-6 px-6">
+             {activeDeals.map(tx => (
+               <div key={tx.id} onClick={() => navigate('/transaction', { state: { transactionId: tx.id } })} className="flex-shrink-0 w-72 glass-panel p-4 relative overflow-hidden cursor-pointer border-green-500/30 shadow-[0_0_20px_rgba(34,197,94,0.05)] card-lift active-press">
+                 <div className="absolute top-0 right-0 w-16 h-16 bg-green-500 opacity-10 blur-2xl rounded-full translate-x-1/2 -translate-y-1/2" />
+                 <div className="flex items-start gap-4">
+                    <div className="w-12 h-12 bg-white/5 rounded-2xl flex items-center justify-center border border-white/10 shrink-0"><Package size={22} className="text-white" /></div>
+                    <div className="flex-1 min-w-0">
+                       <p className="text-[10px] text-green-400 font-black uppercase tracking-widest mb-1">In Progress</p>
+                       <h4 className="text-sm font-black truncate">{tx.gear_name || 'Acquiring Item...'}</h4>
+                       <div className="flex justify-between items-center mt-2">
+                          <span className="text-[11px] font-black bg-white/5 px-2 py-0.5 rounded-lg border border-white/10">${tx.agreed_price}</span>
+                          <span className="text-[9px] font-black uppercase text-muted">Details <ChevronRight size={10} className="inline"/></span>
+                       </div>
+                    </div>
+                 </div>
+               </div>
+             ))}
+          </div>
+        ) : (
+          <div className="glass-panel py-6 text-center border-dashed border-white/5 opacity-50">
+             <p className="text-xs text-secondary font-medium italic">No active dealings right now.</p>
+             <p className="text-[10px] text-muted font-bold uppercase tracking-widest mt-1">Accept a request to see your deal here.</p>
+          </div>
+        )}
       </section>
 
       {/* Categories */}
-      <section className="mb-10 animate-slide-up stagger-3">
-        <div className="flex justify-between items-end mb-4">
-          <h2 className="text-lg font-bold tracking-tight">Categories</h2>
-          <button
-            onClick={() => navigate('/requests')}
-            className="text-xs font-bold text-accent-cyan flex items-center gap-1 active-press"
-          >
-            View All <ArrowRight size={14} />
-          </button>
+      <section className="mb-10 animate-slide-up stagger-4">
+        <div className="flex justify-between items-end mb-4 px-1">
+          <h2 className="text-lg font-black tracking-tight">Browse Categories</h2>
+          <button onClick={() => navigate('/requests')} className="text-xs font-bold text-accent-cyan flex gap-1 active-press">All <ArrowRight size={14} /></button>
         </div>
         <div className="grid grid-cols-3 gap-3">
           {CATEGORIES.map((cat, idx) => (
-            <button
-              key={cat.id}
-              onClick={() => navigate('/requests', { state: { category: cat.id } })}
-              className="flex flex-col items-center justify-center p-4 rounded-2xl bg-secondary/50 border border-bg-glass-border card-lift active-press animate-slide-up"
-              style={{ animationDelay: `${(idx + 5) * 50}ms` }}
-              aria-label={`Browse ${cat.name}`}
-            >
+            <button key={cat.id} onClick={() => navigate('/requests', { state: { category: cat.id } })} className="flex flex-col items-center justify-center p-4 rounded-2xl bg-secondary/50 border border-bg-glass-border card-lift active-press" style={{ animationDelay: `${(idx + 5) * 50}ms` }}>
               <cat.icon size={24} className={`${cat.color} mb-2`} />
-              <span className="text-[10px] font-bold uppercase tracking-widest">{cat.name}</span>
+              <span className="text-[10px] font-black uppercase tracking-widest text-center">{cat.name}</span>
             </button>
           ))}
         </div>
@@ -316,37 +312,25 @@ const Home = () => {
 
       {/* Available Gear Nearby */}
       {nearbyGear.length > 0 && (
-        <section className="mb-8 animate-slide-up stagger-4">
-          <div className="flex justify-between items-end mb-3">
-            <h2 className="text-lg font-bold tracking-tight">Available Nearby</h2>
-            <button
-              onClick={() => navigate('/requests')}
-              className="text-xs font-bold text-accent-cyan flex items-center gap-1 active-press"
-            >
-              View All <ArrowRight size={14} />
-            </button>
+        <section className="mb-10 animate-slide-up stagger-5">
+          <div className="flex justify-between items-end mb-4 px-1">
+            <h2 className="text-lg font-black tracking-tight">Available Nearby</h2>
+            <button onClick={() => navigate('/requests')} className="text-xs font-bold text-accent-cyan flex gap-1 active-press">Map <ArrowRight size={14} /></button>
           </div>
-          <div className="flex gap-3 overflow-x-auto pb-2 no-scrollbar">
+          <div className="flex gap-4 overflow-x-auto pb-4 no-scrollbar -mx-6 px-6">
             {nearbyGear.map(item => (
-              <div
-                key={item.id}
-                onClick={() => navigate(`/gear/${item.id}`)}
-                className="flex-shrink-0 w-36 glass-panel p-0 overflow-hidden cursor-pointer card-lift active-press"
-              >
-                <div className="w-full h-28 bg-gray-800 flex items-center justify-center overflow-hidden">
-                  {item.photo_urls?.[0]
-                    ? <img src={item.photo_urls[0]} alt={item.name} className="w-full h-full object-cover" />
-                    : <span className="text-3xl">🎸</span>
-                  }
+              <div key={item.id} onClick={() => navigate(`/gear/${item.id}`)} className="flex-shrink-0 w-40 glass-panel p-0 overflow-hidden cursor-pointer card-lift active-press">
+                <div className="w-full h-32 bg-gray-900 flex items-center justify-center overflow-hidden">
+                  {item.photo_urls?.[0] ? <img src={item.photo_urls[0]} alt={item.name} className="w-full h-full object-cover" /> : <span className="text-4xl">🎸</span>}
                 </div>
-                <div className="p-2">
-                  <p className="text-xs font-bold truncate">{item.name}</p>
-                  <p className="text-[10px] text-accent-cyan font-bold mt-0.5">
-                    {item.can_rent && item.rent_price ? `$${item.rent_price}/hr` : item.can_lend ? 'Free Lend' : 'For Sale'}
-                  </p>
-                  {item.distance_m != null && (
-                    <p className="text-[9px] text-muted mt-0.5">{(item.distance_m / 1000).toFixed(1)} km away</p>
-                  )}
+                <div className="p-3">
+                  <p className="text-xs font-black truncate">{item.name}</p>
+                  <div className="flex justify-between items-center mt-1">
+                    <p className="text-[11px] text-green-400 font-bold">
+                       {item.can_sell && item.sell_price ? `$${item.sell_price}` : item.can_rent && item.rent_price ? `$${item.rent_price}/hr` : 'Free'}
+                    </p>
+                    {item.distance_m != null && <p className="text-[9px] text-muted">{(item.distance_m / 1000).toFixed(1)}km</p>}
+                  </div>
                 </div>
               </div>
             ))}
@@ -355,146 +339,89 @@ const Home = () => {
       )}
 
       {/* Emergency CTA */}
-      <div className="mb-10 animate-slide-up stagger-4">
+      <div className="mb-12 animate-slide-up stagger-6">
         <div className="relative w-full">
           <div className="absolute inset-0 bg-urgency-emergency opacity-20 blur-3xl rounded-full scale-110 animate-pulse" />
-          <button
-            onClick={() => navigate('/create-request')}
-            className="btn-emergency py-8 relative z-10 active-press"
-            aria-label="Request emergency gear immediately"
-          >
+          <button onClick={() => navigate('/create-request')} className="btn-emergency py-8 relative z-10 active-press">
             <div className="btn-emergency-pulse" />
             <div className="btn-emergency-pulse" style={{ animationDelay: '1s' }} />
             <ShieldAlert size={42} className="mb-2 text-white" />
             <div className="flex flex-col items-center">
-              <span className="text-display text-2xl">NEED GEAR NOW</span>
-              <span className="text-sm font-bold opacity-90 tracking-[0.2em]">EMERGENCY REQUEST</span>
+              <span className="text-display text-2xl">GEAR EMERGENCY</span>
+              <span className="text-[10px] font-black opacity-90 tracking-[0.3em] uppercase mt-1">Request Support Now</span>
             </div>
           </button>
         </div>
       </div>
 
-      {/* Active Nearby */}
-      <div className="mt-auto mb-10 glass-panel animate-slide-up stagger-5" role="region" aria-label="Nearby active requests">
-        <div className="flex justify-between items-center mb-4">
-          <h3 className="text-xs font-bold text-secondary uppercase tracking-widest flex items-center gap-2">
-            <Zap size={14} className="text-accent-cyan" />
-            Active Nearby
+      {/* Active Requests (Live Nearby) */}
+      <div className="mt-auto mb-10 glass-panel animate-slide-up stagger-7">
+        <div className="flex justify-between items-center mb-4 px-1">
+          <h3 className="text-[10px] font-black text-muted uppercase tracking-[0.2em] flex items-center gap-2">
+            <Zap size={14} className="text-accent-cyan" /> Live Network
           </h3>
-          {nearby.length > 0 && (
-            <span className="badge badge-emergency">{nearby.length} LIVE</span>
-          )}
+          {nearby.length > 0 && <span className="badge badge-emergency">{nearby.length} LIVE</span>}
         </div>
-
         {loadingNearby ? (
-          <div className="flex justify-center py-6">
-            <Loader2 size={24} className="animate-spin text-accent-cyan" />
-          </div>
+          <div className="flex justify-center py-6"><Loader2 size={24} className="animate-spin text-accent-cyan" /></div>
         ) : nearby.length === 0 ? (
-          <p className="text-sm text-muted text-center py-4 italic">The area is currently quiet.</p>
+          <p className="text-sm text-muted text-center py-4 italic">No active requests in this zone.</p>
         ) : (
           <div className="flex flex-col gap-3">
             {nearby.map((req, index) => (
-              <div
-                key={req.id}
-                className="flex items-center justify-between p-4 rounded-xl bg-bg-secondary/40 border border-bg-glass-border cursor-pointer card-lift active-press animate-slide-up"
-                style={{ animationDelay: `${(index + 8) * 100}ms` }}
-                onClick={() => navigate(`/requests/${req.id}`)}
-                role="button"
-                aria-label={`Gear request: ${req.equipment}`}
-              >
+              <div key={req.id} className="flex items-center justify-between p-4 rounded-2xl bg-bg-secondary/40 border border-bg-glass-border cursor-pointer card-lift active-press" style={{ animationDelay: `${(index + 8) * 100}ms` }} onClick={() => navigate(`/requests/${req.id}`)}>
                 <div className="flex items-center gap-3">
                   <div className="relative">
-                    <div className={`w-3 h-3 rounded-full ${req.urgency === 'emergency' ? 'bg-urgency-emergency' : 'bg-urgency-soon'}`} />
+                    <div className={`w-2.5 h-2.5 rounded-full ${req.urgency === 'emergency' ? 'bg-urgency-emergency' : 'bg-urgency-soon'}`} />
                     <div className={`absolute inset-0 rounded-full animate-ping opacity-40 ${req.urgency === 'emergency' ? 'bg-urgency-emergency' : 'bg-urgency-soon'}`} />
                   </div>
                   <div className="flex flex-col">
-                    <span className="text-sm font-semibold tracking-tight">{req.equipment}</span>
-                    <span className={`text-[9px] font-bold uppercase tracking-widest ${req.urgency === 'emergency' ? 'text-urgency-emergency' : 'text-urgency-soon'}`}>
-                      {req.urgency}
-                    </span>
+                    <span className="text-sm font-bold tracking-tight">{req.equipment}</span>
+                    <span className={`text-[8px] font-black uppercase tracking-widest ${req.urgency === 'emergency' ? 'text-urgency-emergency' : 'text-urgency-soon'}`}>{req.urgency}</span>
                   </div>
                 </div>
-                <span className="text-[10px] font-bold text-muted uppercase">
-                  {req.distance_m != null ? `${(req.distance_m / 1000).toFixed(1)}km` : '—'}
-                </span>
+                <ChevronRight size={14} className="text-muted" />
               </div>
             ))}
           </div>
         )}
       </div>
 
-      {/* ── Notifications Panel ────────────────────────────────────────────── */}
+      {/* Notifications Panel */}
       {showNotifs && (
-        <div
-          className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm"
-          onClick={() => setShowNotifs(false)}
-        >
-          <div
-            className="absolute bottom-0 left-0 right-0 max-w-[480px] mx-auto bg-bg-secondary rounded-t-3xl border-t border-bg-glass-border animate-slide-up"
-            style={{ maxHeight: '75vh', paddingBottom: 'calc(env(safe-area-inset-bottom) + 1rem)' }}
-            onClick={e => e.stopPropagation()}
-          >
-            {/* Handle */}
-            <div className="flex justify-center pt-3 pb-1">
-              <div className="w-10 h-1 bg-gray-600 rounded-full" />
+        <div className="fixed inset-0 z-[200] bg-black/60 backdrop-blur-sm" onClick={() => setShowNotifs(false)}>
+          <div className="absolute bottom-0 left-0 right-0 max-w-[480px] mx-auto bg-bg-secondary rounded-t-[2.5rem] border-t border-bg-glass-border animate-slide-up" style={{ maxHeight: '75vh', paddingBottom: 'calc(env(safe-area-inset-bottom) + 1rem)' }} onClick={e => e.stopPropagation()}>
+            <div className="flex justify-center pt-4 pb-2"><div className="w-10 h-1 bg-gray-600 rounded-full" /></div>
+            <div className="flex justify-between items-center px-6 py-4 border-b border-bg-glass-border">
+              <h2 className="text-lg font-black flex items-center gap-2"><Bell size={18} className="text-urgency-soon" /> Updates</h2>
+              <button onClick={() => setShowNotifs(false)} className="text-muted"><X size={24} /></button>
             </div>
-
-            {/* Header */}
-            <div className="flex justify-between items-center px-5 py-3 border-b border-bg-glass-border">
-              <h2 className="text-base font-bold flex items-center gap-2">
-                <Bell size={16} className="text-urgency-soon" />
-                Notifications
-              </h2>
-              <button onClick={() => setShowNotifs(false)} className="text-muted hover:text-white">
-                <X size={20} />
-              </button>
-            </div>
-
-            {/* List */}
-            <div className="overflow-y-auto" style={{ maxHeight: 'calc(75vh - 90px)' }}>
+            <div className="overflow-y-auto" style={{ maxHeight: 'calc(75vh - 100px)' }}>
               {loadingNotifs ? (
-                <div className="flex justify-center py-12">
-                  <Loader2 size={28} className="animate-spin text-accent-cyan" />
-                </div>
+                <div className="flex justify-center py-12"><Loader2 size={28} className="animate-spin text-accent-cyan" /></div>
               ) : notifications.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-14 gap-3">
-                  <BellOff size={40} className="text-gray-600" />
-                  <p className="text-secondary text-sm">No notifications yet.</p>
-                  <p className="text-muted text-xs">Activity will appear here.</p>
+                  <BellOff size={40} className="text-gray-700" />
+                  <p className="text-secondary text-sm font-bold">All clear.</p>
                 </div>
               ) : (
                 <div className="divide-y divide-bg-glass-border">
                   {notifications.map(notif => {
                     const action = getNotifAction(notif);
                     return (
-                    <div
-                      key={notif.id}
-                      onClick={() => { if (action) { setShowNotifs(false); navigate(action.route, { state: action.state }); } }}
-                      className={`flex gap-3 px-5 py-4 transition-colors ${!notif.is_read ? 'bg-accent-cyan/5' : ''} ${action ? 'cursor-pointer hover:bg-white/5 active:bg-white/10' : ''}`}
-                    >
-                      <span className="text-xl shrink-0 mt-0.5">
-                        {NOTIF_ICON[notif.type] ?? '🔔'}
-                      </span>
+                    <div key={notif.id} onClick={() => { if (action) { setShowNotifs(false); navigate(action.route, { state: action.state }); } }} className={`flex gap-4 px-6 py-5 transition-colors ${!notif.is_read ? 'bg-accent-cyan/5' : ''} ${action ? 'cursor-pointer hover:bg-white/5 active:bg-white/10' : ''}`}>
+                      <span className="text-2xl mt-0.5">{NOTIF_ICON[notif.type] ?? '🔔'}</span>
                       <div className="flex-1 min-w-0">
                         <div className="flex justify-between items-start gap-2">
-                          <p className="text-sm font-semibold leading-tight">{notif.title}</p>
-                          {!notif.is_read && (
-                            <div className="w-2 h-2 bg-accent-cyan rounded-full shrink-0 mt-1" />
-                          )}
+                          <p className="text-sm font-black leading-tight">{notif.title}</p>
+                          {!notif.is_read && <div className="w-2 h-2 bg-accent-cyan rounded-full shrink-0 mt-1" />}
                         </div>
-                        {notif.body && (
-                          <p className="text-xs text-secondary mt-0.5 leading-relaxed">{notif.body}</p>
-                        )}
-                        <p className="text-[10px] text-muted mt-1">{formatTimeAgo(notif.created_at)}</p>
+                        {notif.body && <p className="text-xs text-secondary mt-1 leading-relaxed">{notif.body}</p>}
+                        <p className="text-[10px] text-muted mt-2 font-bold uppercase">{formatTimeAgo(notif.created_at)}</p>
                       </div>
                     </div>
                   );
                   })}
-                  <div className="flex items-center justify-center gap-1.5 py-4 text-xs text-muted">
-                    <CheckCheck size={13} />
-                    All caught up
-                  </div>
                 </div>
               )}
             </div>

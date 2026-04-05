@@ -14,7 +14,7 @@ const createTransactionSchema = z.object({
   gear_item_id: z.string().uuid(),
   borrower_id:  z.string().uuid(),
   type:         z.enum(['rental','loan','sale']),
-  agreed_price: z.number().positive().optional(),
+  agreed_price: z.number().nonnegative().optional(),
   notes:        z.string().max(500).optional(),
 });
 
@@ -32,27 +32,30 @@ export default async function transactionRoutes(app: FastifyInstance) {
       return reply.code(400).send({ error: parsed.error.flatten().fieldErrors });
     }
 
-    const gear = await getGearById(parsed.data.gear_item_id);
+    const { gear_item_id, borrower_id, request_id } = parsed.data;
+
+    const gear = await getGearById(gear_item_id);
     if (!gear)                      return reply.code(404).send({ error: 'Gear item not found' });
     if (gear.owner_id !== lenderId) return reply.code(403).send({ error: 'You do not own this item' });
+    // Allow retrying if transaction was cancelled? For now strict
     if (gear.status !== 'available') return reply.code(409).send({ error: 'Item is not available' });
 
     const tx = await createTransaction({ lender_id: lenderId, ...parsed.data });
 
     await updateGearStatus(gear.id, lenderId, 'lent_out');
 
-    if (parsed.data.request_id) {
-      await updateRequestStatus(parsed.data.request_id, 'matched', {
+    if (request_id) {
+      await updateRequestStatus(request_id, 'matched', {
         fulfilled_by_id: lenderId,
         matched_gear_id: gear.id,
       });
     }
 
-    await createNotificationsForUsers([parsed.data.borrower_id], {
+    await createNotificationsForUsers([borrower_id], {
       type:  'transaction_update',
       title: 'Your gear request was accepted!',
-      body:  `${gear.name} is available — open the app to coordinate pickup.`,
-      data:  { transaction_id: tx.id, screen: 'TransactionDetail' },
+      body:  `${gear.name} is ready for you. Agreed Price: $${parsed.data.agreed_price || 0}.`,
+      data:  { transaction_id: tx.id, screen: 'TransactionDetail', request_id: request_id || '' },
     });
 
     return reply.code(201).send({ transaction: tx });
@@ -111,7 +114,7 @@ export default async function transactionRoutes(app: FastifyInstance) {
     await createNotificationsForUsers([otherPartyId], {
       type:  'transaction_update',
       title: `Transaction ${parsed.data.status}`,
-      body:  `The gear transaction has been marked as ${parsed.data.status}.`,
+      body:  `The gear transaction for ${tx.id.slice(0,8)} has been marked as ${parsed.data.status}.`,
       data:  { transaction_id: tx.id },
     });
 

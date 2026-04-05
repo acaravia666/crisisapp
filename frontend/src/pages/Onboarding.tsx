@@ -6,6 +6,17 @@ const Onboarding = () => {
 
   return (
     <div className="flex flex-col h-full animate-slide-up bg-bg-primary relative overflow-hidden">
+      {/* DBG Badge */}
+      <div 
+        style={{ 
+          position: 'absolute', top: '10px', right: '10px', zIndex: 1000,
+          background: '#ef4444', color: 'white', fontSize: '10px', fontWeight: 'bold',
+          padding: '2px 8px', borderRadius: '10px', boxShadow: '0 4px 12px rgba(0,0,0,0.5)'
+        }}
+      >
+        LIVE UPDATE ACTIVE
+      </div>
+
       {/* Background glow */}
       <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[500px] h-[300px] bg-red-500/20 blur-[100px] rounded-full pointer-events-none" />
 
