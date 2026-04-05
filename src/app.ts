@@ -11,6 +11,7 @@ import path from 'path';
 import { randomUUID } from 'crypto';
 import { env } from './config/env';
 import { redis } from './db/redis';
+import { uploadToCloudinary } from './lib/cloudinary';
 
 const UPLOADS_DIR = process.env.VERCEL ? '/tmp/uploads' : path.join(__dirname, '..', 'uploads');
 
@@ -124,20 +125,27 @@ export async function buildApp() {
     const file = await request.file();
     if (!file) return reply.code(400).send({ error: 'No file provided' });
 
-    const ext      = path.extname(file.filename).toLowerCase() || '.jpg';
-    const allowed  = ['.jpg', '.jpeg', '.png', '.webp', '.heic'];
+    const ext     = (file.filename.split('.').pop() || '').toLowerCase();
+    const allowed = ['jpg', 'jpeg', 'png', 'webp', 'heic'];
     if (!allowed.includes(ext)) {
       return reply.code(400).send({ error: 'Only jpg, png, webp or heic allowed' });
     }
 
-    const filename = `${randomUUID()}${ext}`;
-    const dest     = path.join(UPLOADS_DIR, filename);
+    try {
+      // Collect file into buffer
+      const chunks: Buffer[] = [];
+      for await (const chunk of file.file) {
+        chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+      }
+      const buffer = Buffer.concat(chunks);
 
-
-    await pipeline(file.file, fs.createWriteStream(dest));
-
-    const baseUrl = `${request.protocol}://${request.hostname}:${env.PORT}`;
-    return reply.code(201).send({ url: `${baseUrl}/uploads/${filename}` });
+      // Upload to Cloudinary (permanent CDN URL)
+      const url = await uploadToCloudinary(buffer, 'crisisapp/gear');
+      return reply.code(201).send({ url });
+    } catch (err: any) {
+      console.error('Upload error:', err);
+      return reply.code(500).send({ error: 'Upload failed', message: err.message });
+    }
   });
 
   // ─── Health check ────────────────────────────────────────────────────────────

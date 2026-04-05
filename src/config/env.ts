@@ -23,6 +23,11 @@ const envSchema = z.object({
   FCM_CLIENT_EMAIL:        z.string().optional(),
   FCM_PRIVATE_KEY:         z.string().optional(),
 
+  CLOUDINARY_URL:          z.string().optional(),
+  CLOUDINARY_CLOUD_NAME:   z.string().optional(),
+  CLOUDINARY_API_KEY:      z.string().optional(),
+  CLOUDINARY_API_SECRET:   z.string().optional(),
+
   DEFAULT_SEARCH_RADIUS_KM: z.string().default('5'),
   MAX_SEARCH_RADIUS_KM:     z.string().default('50'),
 });
