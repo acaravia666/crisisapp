@@ -84,11 +84,13 @@ const RequestDetail = () => {
   const [error, setError]           = useState('');
 
   // Gear selection & Offer settings
-  const [showGearSelect, setShowGearSelect] = useState(false);
-  const [step, setStep]                     = useState<'pick' | 'terms'>('pick');
-  const [myGear, setMyGear]                 = useState<GearItem[]>([]);
-  const [loadingGear, setLoadingGear]       = useState(false);
-  const [selectedGearId, setSelectedGearId] = useState<string | null>(null);
+  const [showGearSelect, setShowGearSelect]     = useState(false);
+  const [step, setStep]                         = useState<'pick' | 'terms'>('pick');
+  const [myGear, setMyGear]                     = useState<GearItem[]>([]);
+  const [loadingGear, setLoadingGear]           = useState(false);
+  const [selectedGearId, setSelectedGearId]     = useState<string | null>(null);
+  const [showCancelConfirm, setShowCancelConfirm] = useState(false);
+  const [cancelLoading, setCancelLoading]       = useState(false);
   
   // Terms
   const [price, setPrice]       = useState<string>('');
@@ -129,6 +131,20 @@ const RequestDetail = () => {
       setPrice(p?.toString() || '0');
     }
   }, [currentSelectedGear, request?.action]);
+
+  const handleCancelRequest = async () => {
+    if (!request) return;
+    setCancelLoading(true);
+    try {
+      await apiClient.patch(`/requests/${request.id}/cancel`);
+      navigate('/requests');
+    } catch (err: any) {
+      setError(err.response?.data?.error || 'Could not cancel request.');
+      setShowCancelConfirm(false);
+    } finally {
+      setCancelLoading(false);
+    }
+  };
 
   const handleConfirmOffer = () => {
     if (!selectedGearId || !request) return;
@@ -240,7 +256,12 @@ const RequestDetail = () => {
       <div className="fixed bottom-8 left-0 right-0 max-w-[480px] mx-auto px-4 z-[110]">
         <div className="flex gap-3">
           {request.requester_id === user?.id ? (
-            <button onClick={() => navigate('/requests')} className="flex-1 bg-white/10 backdrop-blur-md text-white font-bold py-4 rounded-2xl border border-white/10">Manage My Request</button>
+            <button
+              onClick={() => setShowCancelConfirm(true)}
+              className="flex-1 bg-red-500/10 backdrop-blur-md text-red-400 font-bold py-4 rounded-2xl border border-red-500/20"
+            >
+              Cancel My Request
+            </button>
           ) : (
             <>
               <button onClick={() => navigate(`/chat/${request.id}`, { state: { recipientId: request.requester_id } })} className="w-14 h-14 bg-white/5 backdrop-blur-md flex items-center justify-center rounded-2xl border border-white/10"><MessageSquare size={22} /></button>
@@ -251,6 +272,33 @@ const RequestDetail = () => {
           )}
         </div>
       </div>
+      )}
+
+      {/* Cancel Confirmation */}
+      {showCancelConfirm && (
+        <div className="fixed inset-0 z-[200] bg-black/60 backdrop-blur-sm flex items-end justify-center">
+          <div className="absolute inset-0" onClick={() => setShowCancelConfirm(false)} />
+          <div className="relative w-full max-w-[480px] bg-[#111] rounded-t-[2.5rem] border-t border-white/10 p-6 space-y-4 animate-slide-up">
+            <h2 className="text-xl font-black text-center">Cancel Request?</h2>
+            <p className="text-sm text-secondary text-center leading-relaxed">
+              Your request for <span className="font-bold text-white">{request.equipment}</span> will be removed from the feed.
+            </p>
+            <button
+              onClick={handleCancelRequest}
+              disabled={cancelLoading}
+              className="w-full bg-red-500 text-white font-black py-4 rounded-2xl flex items-center justify-center gap-2 disabled:opacity-50 active:scale-95 transition-transform"
+            >
+              {cancelLoading ? <Loader2 size={18} className="animate-spin" /> : null}
+              {cancelLoading ? 'Cancelling...' : 'Yes, Cancel Request'}
+            </button>
+            <button
+              onClick={() => setShowCancelConfirm(false)}
+              className="w-full bg-white/5 border border-white/10 text-white font-bold py-4 rounded-2xl"
+            >
+              Keep It
+            </button>
+          </div>
+        </div>
       )}
 
       {/* Gear Selection & Terms Modal */}
