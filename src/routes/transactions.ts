@@ -91,17 +91,17 @@ export default async function transactionRoutes(app: FastifyInstance) {
     return reply.send({ transaction: tx });
   });
 
-  // POST /transactions/:id/confirm-delivery — borrower enters delivery PIN
+  // POST /transactions/:id/confirm-delivery — borrower enters PIN + optional photos
   app.post('/:id/confirm-delivery', { preHandler: authenticate }, async (request, reply) => {
     const borrowerId = request.user.sub;
     const { id } = request.params as { id: string };
-    const { pin } = request.body as { pin?: string };
+    const { pin, photos = [] } = request.body as { pin?: string; photos?: string[] };
 
     if (!pin || !/^\d{4}$/.test(pin)) {
       return reply.code(400).send({ error: 'PIN must be 4 digits' });
     }
 
-    const result = await confirmDelivery(id, borrowerId, pin);
+    const result = await confirmDelivery(id, borrowerId, pin, photos);
     if (!result.ok) return reply.code(400).send({ error: result.error });
 
     const tx = result.tx!;
@@ -115,17 +115,17 @@ export default async function transactionRoutes(app: FastifyInstance) {
     return reply.send({ transaction: tx });
   });
 
-  // POST /transactions/:id/confirm-return — lender enters return PIN
+  // POST /transactions/:id/confirm-return — lender enters PIN + optional photos
   app.post('/:id/confirm-return', { preHandler: authenticate }, async (request, reply) => {
     const lenderId = request.user.sub;
     const { id } = request.params as { id: string };
-    const { pin } = request.body as { pin?: string };
+    const { pin, photos = [] } = request.body as { pin?: string; photos?: string[] };
 
     if (!pin || !/^\d{4}$/.test(pin)) {
       return reply.code(400).send({ error: 'PIN must be 4 digits' });
     }
 
-    const result = await confirmReturn(id, lenderId, pin);
+    const result = await confirmReturn(id, lenderId, pin, photos);
     if (!result.ok) return reply.code(400).send({ error: result.error });
 
     const tx = result.tx!;

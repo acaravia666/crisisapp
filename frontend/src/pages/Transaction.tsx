@@ -2,8 +2,9 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import {
   ShieldCheck, Package, MessageSquare, Loader2,
   CheckCircle, XCircle, Clock, AlertTriangle, User, ArrowLeft,
-  CalendarClock, RotateCcw, DollarSign, TrendingUp, KeyRound, Eye, EyeOff,
+  CalendarClock, RotateCcw, DollarSign, TrendingUp, KeyRound, Eye, EyeOff, Camera, X,
 } from 'lucide-react';
+import VerifiedBadge from '../components/VerifiedBadge';
 import { useState, useEffect, useRef } from 'react';
 import { apiClient } from '../api/client';
 import { useAuth } from '../store/AuthContext';
@@ -21,21 +22,25 @@ interface LocationState {
 }
 
 interface TxData {
-  id:             string;
-  status:         'pending' | 'active' | 'completed' | 'cancelled' | 'disputed';
-  type:           string;
-  agreed_price:   number | null;
-  gear_name?:     string;
-  lender_name?:   string;
-  borrower_name?: string;
-  lender_id:      string;
-  borrower_id:    string;
-  request_id?:    string;
-  notes?:         string;
-  started_at?:    string | null;
-  ended_at?:      string | null;
-  delivery_pin?:  string | null;
-  return_pin?:    string | null;
+  id:                string;
+  status:            'pending' | 'active' | 'completed' | 'cancelled' | 'disputed';
+  type:              string;
+  agreed_price:      number | null;
+  gear_name?:        string;
+  lender_name?:      string;
+  lender_verified?:  boolean;
+  borrower_name?:    string;
+  borrower_verified?: boolean;
+  lender_id:         string;
+  borrower_id:       string;
+  request_id?:       string;
+  notes?:            string;
+  started_at?:       string | null;
+  ended_at?:         string | null;
+  delivery_pin?:     string | null;
+  return_pin?:       string | null;
+  delivery_photos?:  string[];
+  return_photos?:    string[];
 }
 
 // Parse "Duration: 10 days" or "Duration: 4 hours" from notes
@@ -81,9 +86,13 @@ const Transaction = () => {
   const [txId, setTxId]                   = useState<string | null>(state.transactionId ?? null);
   const [txData, setTxData]               = useState<TxData | null>(null);
   const [actionLoading, setActionLoading] = useState(false);
-  const [pinInput, setPinInput]           = useState('');
-  const [showPin, setShowPin]             = useState(false);
-  const [pinError, setPinError]           = useState('');
+  const [pinInput, setPinInput]             = useState('');
+  const [showPin, setShowPin]               = useState(false);
+  const [pinError, setPinError]             = useState('');
+  const [photos, setPhotos]                 = useState<File[]>([]);
+  const [photoPreviews, setPhotoPreviews]   = useState<string[]>([]);
+  const [uploadingPhotos, setUploadingPhotos] = useState(false);
+  const photoInputRef                       = useRef<HTMLInputElement>(null);
   const didInit = useRef(false);
 
   const fetchTx = async (id: string) => {
@@ -129,15 +138,50 @@ const Transaction = () => {
     init();
   }, []);
 
+  const handlePhotoCapture = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files ?? []).slice(0, 3 - photos.length);
+    if (!files.length) return;
+    setPhotos(prev => [...prev, ...files]);
+    setPhotoPreviews(prev => [...prev, ...files.map(f => URL.createObjectURL(f))]);
+    e.target.value = '';
+  };
+
+  const removePhoto = (i: number) => {
+    setPhotos(prev => prev.filter((_, idx) => idx !== i));
+    setPhotoPreviews(prev => prev.filter((_, idx) => idx !== i));
+  };
+
   const confirmPin = async (endpoint: 'confirm-delivery' | 'confirm-return') => {
     const id = txId ?? txData?.id;
     if (!id || pinInput.length !== 4) return;
     setActionLoading(true);
     setPinError('');
     try {
-      const res = await apiClient.post(`/transactions/${id}/${endpoint}`, { pin: pinInput });
+      let uploadedUrls: string[] = [];
+      if (photos.length > 0) {
+        setUploadingPhotos(true);
+        uploadedUrls = await Promise.all(
+          photos.map(async (file) => {
+            const fd = new FormData();
+            fd.append('file', file);
+            const { data } = await apiClient.post('/uploads', fd, {
+              headers: { 'Content-Type': undefined },
+            });
+            return data.url as string;
+          })
+        );
+        setUploadingPhotos(false);
+      }
+
+      const res = await apiClient.post(`/transactions/${id}/${endpoint}`, {
+        pin: pinInput,
+        photos: uploadedUrls,
+      });
       setTxData(res.data.transaction);
       setPinInput('');
+      setPhotos([]);
+      setPhotoPreviews([]);
+
       if (endpoint === 'confirm-return') {
         navigate('/rating', {
           state: {
@@ -148,6 +192,7 @@ const Transaction = () => {
       }
     } catch (err: any) {
       setPinError(err.response?.data?.error || 'Incorrect PIN. Try again.');
+      setUploadingPhotos(false);
     } finally {
       setActionLoading(false);
     }
@@ -278,7 +323,12 @@ const Transaction = () => {
               <p className="text-[10px] text-muted uppercase font-bold tracking-widest mb-0.5">
                 {isLender ? 'Borrower' : 'Lender'}
               </p>
-              <p className="text-base font-bold">{otherName}</p>
+              <p className="text-base font-bold flex items-center gap-1.5">
+                {otherName}
+                {isLender
+                  ? txData.borrower_verified && <VerifiedBadge />
+                  : txData.lender_verified && <VerifiedBadge />}
+              </p>
             </div>
           </div>
         </div>
@@ -467,7 +517,6 @@ const Transaction = () => {
                   ))}
                 </div>
                 {pinError && <p className="text-xs text-red-400 font-bold text-center">{pinError}</p>}
-                {/* Numpad */}
                 <div className="grid grid-cols-3 gap-2">
                   {['1','2','3','4','5','6','7','8','9','','0','⌫'].map((k) => (
                     <button
@@ -483,13 +532,32 @@ const Transaction = () => {
                     </button>
                   ))}
                 </div>
+                {/* Photo capture */}
+                <input ref={photoInputRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={handlePhotoCapture} />
+                {photoPreviews.length > 0 && (
+                  <div className="flex gap-2">
+                    {photoPreviews.map((src, i) => (
+                      <div key={i} className="relative w-16 h-16 rounded-xl overflow-hidden border border-white/10">
+                        <img src={src} className="w-full h-full object-cover" />
+                        <button onClick={() => removePhoto(i)} className="absolute top-0.5 right-0.5 w-5 h-5 bg-black/70 rounded-full flex items-center justify-center">
+                          <X size={10} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {photos.length < 3 && (
+                  <button onClick={() => photoInputRef.current?.click()} className="w-full flex items-center justify-center gap-2 bg-white/5 border border-white/10 rounded-2xl py-3 text-xs font-bold text-muted">
+                    <Camera size={14} /> Add Gear Photo ({photos.length}/3)
+                  </button>
+                )}
                 <button
                   onClick={() => confirmPin('confirm-delivery')}
                   disabled={pinInput.length !== 4 || actionLoading}
                   className="w-full bg-green-500 text-black font-black py-4 rounded-2xl flex items-center justify-center gap-2 disabled:opacity-40 active:scale-95 transition-all"
                 >
                   {actionLoading ? <Loader2 size={20} className="animate-spin" /> : <CheckCircle size={20} />}
-                  {actionLoading ? 'Verifying...' : 'Confirm Receipt'}
+                  {actionLoading ? (uploadingPhotos ? 'Uploading photos...' : 'Verifying...') : 'Confirm Receipt'}
                 </button>
               </div>
             </div>
@@ -547,13 +615,32 @@ const Transaction = () => {
                   </button>
                 ))}
               </div>
+              {/* Return condition photos */}
+              <input ref={photoInputRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={handlePhotoCapture} />
+              {photoPreviews.length > 0 && (
+                <div className="flex gap-2">
+                  {photoPreviews.map((src, i) => (
+                    <div key={i} className="relative w-16 h-16 rounded-xl overflow-hidden border border-white/10">
+                      <img src={src} className="w-full h-full object-cover" />
+                      <button onClick={() => removePhoto(i)} className="absolute top-0.5 right-0.5 w-5 h-5 bg-black/70 rounded-full flex items-center justify-center">
+                        <X size={10} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {photos.length < 3 && (
+                <button onClick={() => photoInputRef.current?.click()} className="w-full flex items-center justify-center gap-2 bg-white/5 border border-white/10 rounded-2xl py-3 text-xs font-bold text-muted">
+                  <Camera size={14} /> Photo Evidence ({photos.length}/3)
+                </button>
+              )}
               <button
                 onClick={() => confirmPin('confirm-return')}
                 disabled={pinInput.length !== 4 || actionLoading}
                 className="w-full bg-white text-black font-black py-4 rounded-2xl flex items-center justify-center gap-2 disabled:opacity-40 active:scale-95 transition-all"
               >
                 {actionLoading ? <Loader2 size={20} className="animate-spin" /> : <CheckCircle size={20} />}
-                {actionLoading ? 'Verifying...' : 'Confirm Return & Close Deal'}
+                {actionLoading ? (uploadingPhotos ? 'Uploading...' : 'Verifying...') : 'Confirm Return & Close Deal'}
               </button>
             </div>
           )}

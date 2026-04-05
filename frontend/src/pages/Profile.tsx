@@ -1,5 +1,6 @@
 import { useEffect, useState, useRef } from 'react';
 import { Star, MapPin, CheckCircle, Package, Loader2, LogOut, Settings, X, Check, Camera } from 'lucide-react';
+import VerifiedBadge from '../components/VerifiedBadge';
 import { useAuth } from '../store/AuthContext';
 import { apiClient } from '../api/client';
 
@@ -117,7 +118,10 @@ const Profile = () => {
           <div className="absolute bottom-0.5 right-0.5 w-5 h-5 bg-green-500 rounded-full border-2 border-bg-primary" />
         </div>
 
-        <h1 className="text-2xl font-bold mb-1">{user?.name ?? 'Loading...'}</h1>
+        <h1 className="text-2xl font-bold mb-1 flex items-center justify-center gap-2">
+          {user?.name ?? 'Loading...'}
+          {user?.is_verified && <VerifiedBadge size="md" />}
+        </h1>
 
         {user?.bio && (
           <p className="text-secondary text-sm mb-2 px-4">{user.bio}</p>

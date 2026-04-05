@@ -107,4 +107,21 @@ export default async function userRoutes(app: FastifyInstance) {
     await markNotificationsRead(userId);
     return reply.code(204).send();
   });
+
+  // PATCH /users/:id/verify — admin-only, requires X-Admin-Secret header
+  app.patch('/:id/verify', async (request, reply) => {
+    const secret = request.headers['x-admin-secret'];
+    if (!secret || secret !== env.ADMIN_SECRET) {
+      return reply.code(403).send({ error: 'Forbidden' });
+    }
+
+    const { id } = request.params as { id: string };
+    const { pool } = await import('../db/pool');
+    const { rows } = await pool.query(
+      `UPDATE users SET is_verified = true WHERE id = $1 RETURNING id, name, is_verified`,
+      [id]
+    );
+    if (!rows[0]) return reply.code(404).send({ error: 'User not found' });
+    return reply.send({ user: rows[0] });
+  });
 }

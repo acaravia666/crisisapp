@@ -30,6 +30,8 @@ const envSchema = z.object({
 
   DEFAULT_SEARCH_RADIUS_KM: z.string().default('5'),
   MAX_SEARCH_RADIUS_KM:     z.string().default('50'),
+
+  ADMIN_SECRET:             z.string().default('change-me-in-production'),
 });
 
 const isVercelBuild = process.env.VERCEL && process.env.NODE_ENV === 'production';
@@ -53,4 +55,5 @@ export const env = {
   ANTHROPIC_API_KEY:        data.ANTHROPIC_API_KEY || '',
   DEFAULT_SEARCH_RADIUS_KM: parseFloat(data.DEFAULT_SEARCH_RADIUS_KM || '5'),
   MAX_SEARCH_RADIUS_KM:     parseFloat(data.MAX_SEARCH_RADIUS_KM || '50'),
+  ADMIN_SECRET:             data.ADMIN_SECRET || 'change-me-in-production',
 };

@@ -6,7 +6,25 @@ import {
   getNearbyRequests, updateRequestStatus,
 } from '../db/queries/requests';
 import { parseGearRequest } from '../services/ai-parser';
+import { findMatches, getNotifyCount, getDeviceTokens } from '../services/matching';
+import { notifyMatches, broadcastEmergency } from '../services/notifications';
 import { env } from '../config/env';
+
+async function triggerMatching(req: Awaited<ReturnType<typeof createRequest>>) {
+  try {
+    const matches   = await findMatches(req as any);
+    const topN      = matches.slice(0, getNotifyCount(req.urgency));
+    if (!topN.length) return;
+    const tokenMap  = await getDeviceTokens(topN.map(m => m.owner_id));
+    if (req.urgency === 'emergency') {
+      await broadcastEmergency(req as any, topN, tokenMap);
+    } else {
+      await notifyMatches(req as any, topN, tokenMap);
+    }
+  } catch (err) {
+    console.error('[matching] Error during match notification:', err);
+  }
+}
 
 const gearCategoryEnum = z.enum([
   'cables','microphones','speakers','stands','pedals',
@@ -52,6 +70,7 @@ export default async function requestRoutes(app: FastifyInstance) {
     }
 
     const req = await createRequest({ requester_id: userId, ...parsed.data });
+    triggerMatching(req); // fire-and-forget, don't block the response
     return reply.code(201).send({ request: req });
   });
 
@@ -82,6 +101,7 @@ export default async function requestRoutes(app: FastifyInstance) {
       notes:         aiResult.notes,
     });
 
+    triggerMatching(req); // fire-and-forget
     return reply.code(201).send({ request: req, ai_parse: aiResult });
   });
 
