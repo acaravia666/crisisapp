@@ -12,7 +12,17 @@ import { randomUUID } from 'crypto';
 import { env } from './config/env';
 import { redis } from './db/redis';
 
-const UPLOADS_DIR = path.join(__dirname, '..', 'uploads');
+const UPLOADS_DIR = process.env.VERCEL ? '/tmp/uploads' : path.join(__dirname, '..', 'uploads');
+
+function ensureUploadsDir() {
+  try {
+    if (!fs.existsSync(UPLOADS_DIR)) {
+      fs.mkdirSync(UPLOADS_DIR, { recursive: true });
+    }
+  } catch (err) {
+    console.warn('Could not create uploads dir (Expected on Vercel):', err);
+  }
+}
 
 // Routes
 import authRoutes from './routes/auth';
@@ -109,7 +119,7 @@ export async function buildApp() {
     const filename = `${randomUUID()}${ext}`;
     const dest     = path.join(UPLOADS_DIR, filename);
 
-    fs.mkdirSync(UPLOADS_DIR, { recursive: true });
+    ensureUploadsDir();
     await pipeline(file.file, fs.createWriteStream(dest));
 
     const baseUrl = `${request.protocol}://${request.hostname}:${env.PORT}`;
