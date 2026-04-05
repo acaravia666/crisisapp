@@ -60,6 +60,7 @@ export async function buildApp() {
 
   await app.register(fastifyMultipart, { limits: { fileSize: 10 * 1024 * 1024 } }); // 10 MB max
 
+  ensureUploadsDir();
   await app.register(fastifyStatic, {
     root:       UPLOADS_DIR,
     prefix:     '/uploads/',
@@ -119,7 +120,7 @@ export async function buildApp() {
     const filename = `${randomUUID()}${ext}`;
     const dest     = path.join(UPLOADS_DIR, filename);
 
-    ensureUploadsDir();
+
     await pipeline(file.file, fs.createWriteStream(dest));
 
     const baseUrl = `${request.protocol}://${request.hostname}:${env.PORT}`;
