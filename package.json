@@ -1,0 +1,49 @@
+{
+  "name": "crisisapp",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "dev": "nodemon --exec ts-node src/index.ts",
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "migrate": "ts-node src/db/migrate.ts",
+    "seed": "ts-node src/db/seed.ts"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.82.0",
+    "@fastify/cors": "^11.2.0",
+    "@fastify/jwt": "^10.0.0",
+    "@fastify/multipart": "^9.4.0",
+    "@fastify/rate-limit": "^10.3.0",
+    "@fastify/static": "^9.0.0",
+    "@fastify/websocket": "^11.2.0",
+    "bcryptjs": "^3.0.3",
+    "bullmq": "^5.73.0",
+    "dotenv": "^17.4.0",
+    "fastify": "^5.8.4",
+    "fastify-plugin": "^5.1.0",
+    "firebase-admin": "^13.7.0",
+    "ioredis": "^5.10.1",
+    "jsonwebtoken": "^9.0.3",
+    "pg": "^8.20.0",
+    "pino": "^10.3.1",
+    "uuid": "^13.0.0",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@types/bcryptjs": "^2.4.6",
+    "@types/jsonwebtoken": "^9.0.10",
+    "@types/node": "^25.5.2",
+    "@types/pg": "^8.20.0",
+    "@types/uuid": "^10.0.0",
+    "@types/ws": "^8.18.1",
+    "nodemon": "^3.1.14",
+    "ts-node": "^10.9.2",
+    "typescript": "^6.0.2"
+  }
+}
