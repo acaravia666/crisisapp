@@ -12,9 +12,13 @@ import { env } from '../config/env';
 
 async function triggerMatching(req: Awaited<ReturnType<typeof createRequest>>) {
   try {
-    const loc = (req as any).location ?? {};
-    console.log(`[matching] Request ${req.id} — "${req.equipment}" (${req.urgency}) at (${loc.lat},${loc.lng})`);
-    const matches = await findMatches(req as any);
+    // createRequest returns lat/lng as top-level fields; findMatches expects req.location
+    const reqWithLocation = {
+      ...req,
+      location: { lat: (req as any).lat, lng: (req as any).lng },
+    };
+    console.log(`[matching] Request ${req.id} — "${req.equipment}" (${req.urgency}) at (${(req as any).lat},${(req as any).lng})`);
+    const matches = await findMatches(reqWithLocation as any);
     console.log(`[matching] Found ${matches.length} candidate(s)`);
 
     const topN = matches.slice(0, getNotifyCount(req.urgency));
