@@ -35,8 +35,18 @@ function computeScore(candidate: Omit<MatchCandidate, 'score'>, maxDistM: number
 }
 
 export async function findMatches(request: GearRequest): Promise<MatchCandidate[]> {
-  // Pull requester's location from the request itself (stored as lat/lng)
-  const loc = request.location as unknown as { lat: number; lng: number };
+  // createRequest returns flat lat/lng; GearRequest type expects location object — handle both
+  const nested = request.location as unknown as { lat: number; lng: number } | undefined;
+  const flat   = request as unknown as { lat?: number; lng?: number };
+  const loc    = (nested?.lat != null && nested?.lng != null)
+    ? nested
+    : { lat: flat.lat!, lng: flat.lng! };
+
+  if (loc.lat == null || loc.lng == null) {
+    console.error('[matching] findMatches called with no location — request:', request.id);
+    return [];
+  }
+
   const radiusM = request.search_radius_km * 1000;
 
   const actionCol =
