@@ -1,54 +1,72 @@
 import { useNavigate, useLocation } from 'react-router-dom';
-import { ShieldCheck, MapPin, MessageSquare, Clock, Loader2 } from 'lucide-react';
-import { useState, useEffect } from 'react';
+import { ShieldCheck, MapPin, MessageSquare, Clock, Loader2, CheckCircle, Package } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
 import { apiClient } from '../api/client';
 
 interface LocationState {
-  requestId: string;
-  equipment: string;
-  lat?:      number;
-  lng?:      number;
-}
-
-async function reverseGeocode(lat: number, lng: number): Promise<string> {
-  try {
-    const res  = await fetch(
-      `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json`,
-      { headers: { 'Accept-Language': 'en' } }
-    );
-    const data = await res.json();
-    const road    = data.address?.road ?? data.address?.pedestrian ?? '';
-    const suburb  = data.address?.suburb ?? data.address?.neighbourhood ?? '';
-    return [road, suburb].filter(Boolean).join(', ') || 'Nearby location';
-  } catch {
-    return 'Nearby location';
-  }
+  requestId?:    string;
+  gearItemId?:   string;
+  borrowerId?:   string;
+  equipment?:    string;
+  gearName?:     string;
+  transactionId?: string;
 }
 
 const Transaction = () => {
   const navigate  = useNavigate();
   const location  = useLocation();
-  const { requestId, equipment, lat, lng } =
-    (location.state as LocationState) ?? {};
+  const state     = (location.state as LocationState) ?? {};
 
   const [isLoading, setIsLoading]   = useState(false);
   const [error, setError]           = useState('');
-  const [meetup, setMeetup]         = useState<string>('Arrange via chat');
+  const [txId, setTxId]             = useState<string | null>(state.transactionId || null);
+  const [isCreating, setIsCreating] = useState(false);
+  const [txData, setTxData]         = useState<any>(null);
+  const createdRef               = useRef(false);
 
+  // Auto-create or fetch transaction
   useEffect(() => {
-    if (lat != null && lng != null) {
-      reverseGeocode(lat, lng).then(setMeetup);
-    }
-  }, [lat, lng]);
+    const init = async () => {
+      // 1. Create if we have create params
+      if (!txId && state.requestId && state.gearItemId && !createdRef.current) {
+        createdRef.current = true;
+        setIsCreating(true);
+        try {
+          const { data } = await apiClient.post('/transactions', {
+            request_id:   state.requestId,
+            gear_item_id: state.gearItemId,
+            borrower_id:  state.borrowerId,
+            type:         'loan', 
+          });
+          setTxId(data.transaction.id);
+        } catch (err: any) {
+          setError(err.response?.data?.error || 'Could not initiate transaction.');
+        } finally {
+          setIsCreating(false);
+        }
+      } 
+      // 2. Fetch data if we have an ID
+      else if (txId) {
+        apiClient.get(`/transactions/${txId}`).then(res => {
+           setTxData(res.data.transaction);
+        }).catch(() => setError('Could not load transaction details.'));
+      }
+    };
+    init();
+  }, [state, txId]);
 
   const handleHandoff = async () => {
+    if (!txId) return;
     setIsLoading(true);
     setError('');
     try {
-      if (requestId) {
-        await apiClient.patch(`/requests/${requestId}/fulfill`);
-      }
-      navigate('/rating', { state: { requestId, equipment } });
+      await apiClient.patch(`/transactions/${txId}`, { status: 'completed' });
+      navigate('/rating', { 
+        state: { 
+          transactionId: txId, 
+          equipment: txData?.gear_name || state.gearName || state.equipment || 'Gear' 
+        } 
+      });
     } catch (err: any) {
       setError(err.response?.data?.error || 'Could not complete handoff. Try again.');
     } finally {
@@ -56,74 +74,69 @@ const Transaction = () => {
     }
   };
 
+  if (isCreating) return (
+    <div className="flex flex-col h-full items-center justify-center bg-bg-primary gap-4">
+      <Loader2 size={40} className="animate-spin text-accent-cyan" />
+      <p className="text-secondary font-medium">Securing transaction...</p>
+    </div>
+  );
+
   return (
     <div className="flex flex-col h-full animate-slide-up bg-bg-primary pt-6 px-4">
-
-      {/* Icon */}
-      <div className="flex justify-center items-center mb-10 mt-6">
-        <div className="w-24 h-24 bg-green-500/20 rounded-full flex items-center justify-center border border-green-500/50 shadow-[0_0_30px_rgba(34,197,94,0.3)]">
-          <ShieldCheck size={48} className="text-green-500" />
+      <div className="flex justify-center items-center mb-10 mt-12">
+        <div className="w-24 h-24 bg-green-500/10 rounded-full flex items-center justify-center border border-green-500/20 shadow-[0_0_50px_rgba(34,197,94,0.15)]">
+           <ShieldCheck size={48} className="text-green-500" />
         </div>
       </div>
 
-      <h1 className="text-3xl font-extrabold text-center mb-2">Deal Confirmed</h1>
-      <p className="text-secondary text-center mb-8">
-        {equipment ? `Responding to: ${equipment}` : 'Gear handoff in progress.'}
-      </p>
+      <div className="text-center space-y-2 mb-10 px-6">
+        <h1 className="text-4xl font-black">Deal Active</h1>
+        <p className="text-secondary font-medium">Secured by Pulse Protocol</p>
+      </div>
 
       {error && (
-        <div className="bg-red-500/10 border border-red-500/30 rounded-lg px-4 py-3 text-sm text-red-400 mb-4">
+        <div className="bg-red-500/10 border border-red-500/20 rounded-2xl p-4 text-sm text-red-400 mb-6 font-medium">
           {error}
         </div>
       )}
 
-      <div className="glass-panel space-y-5 mb-8">
-
-        {/* Meetup */}
+      <div className="glass-panel space-y-6 mb-8 py-6">
         <div className="flex items-center gap-4">
-          <div className="w-10 h-10 bg-gray-800 rounded-full flex items-center justify-center border border-gray-700 shrink-0">
-            <MapPin size={20} className="text-urgency-soon" />
-          </div>
-          <div className="flex-1 min-w-0">
-            <p className="text-xs text-muted uppercase tracking-wider mb-0.5">Meetup Point</p>
-            <p className="text-sm font-bold truncate">{meetup}</p>
-            {lat != null && lng != null && (
-              <p className="text-[10px] text-muted mt-0.5">{lat.toFixed(4)}, {lng.toFixed(4)}</p>
-            )}
+          <div className="w-12 h-12 bg-white/5 rounded-2xl flex items-center justify-center border border-white/5 shrink-0"><Package size={22} className="text-white" /></div>
+          <div className="flex-1">
+             <p className="text-[10px] text-muted uppercase font-bold tracking-widest mb-0.5">Inventory Item</p>
+             <p className="text-sm font-bold">{txData?.gear_name || state.gearName || state.equipment || 'Loading gear name...'}</p>
           </div>
         </div>
 
-        {/* Price */}
         <div className="flex items-center gap-4">
-          <div className="w-10 h-10 bg-gray-800 rounded-full flex items-center justify-center border border-gray-700 shrink-0">
-            <MessageSquare size={20} className="text-accent-cyan" />
-          </div>
+          <div className="w-12 h-12 bg-white/5 rounded-2xl flex items-center justify-center border border-white/5 shrink-0"><MapPin size={22} className="text-urgency-soon" /></div>
           <div className="flex-1">
-            <p className="text-xs text-muted uppercase tracking-wider mb-0.5">Terms</p>
-            <p className="text-sm font-bold">Agreed via chat</p>
+             <p className="text-[10px] text-muted uppercase font-bold tracking-widest mb-0.5">Meetup Zone</p>
+             <p className="text-sm font-bold">Crisis Zone · Coordinate in Chat</p>
           </div>
         </div>
 
-        {/* Status */}
         <div className="flex items-center gap-4">
-          <div className="w-10 h-10 bg-gray-800 rounded-full flex items-center justify-center border border-gray-700 shrink-0">
-            <Clock size={20} className="text-white" />
-          </div>
+          <div className="w-12 h-12 bg-white/5 rounded-2xl flex items-center justify-center border border-white/5 shrink-0"><Clock size={22} className="text-accent-cyan" /></div>
           <div className="flex-1">
-            <p className="text-xs text-muted uppercase tracking-wider mb-0.5">Status</p>
-            <p className="text-sm font-bold text-green-400 animate-pulse">Awaiting Handoff</p>
+             <p className="text-[10px] text-muted uppercase font-bold tracking-widest mb-0.5">Current Status</p>
+             <p className="text-sm font-bold text-green-400">Awaiting Handoff</p>
           </div>
         </div>
       </div>
 
-      <button
-        onClick={handleHandoff}
-        disabled={isLoading}
-        className="mt-auto mb-8 py-4 rounded-xl flex items-center justify-center gap-2 font-bold text-lg text-black bg-white transition-all hover:bg-gray-200 disabled:opacity-60 disabled:cursor-not-allowed"
-      >
-        {isLoading && <Loader2 size={20} className="animate-spin text-black" />}
-        {isLoading ? 'Confirming...' : 'Simulate Handoff Complete'}
-      </button>
+      <div className="mt-auto mb-10">
+        <button
+          onClick={handleHandoff}
+          disabled={isLoading || !txId}
+          className="w-full bg-white text-black font-black py-5 rounded-[2.5rem] flex items-center justify-center gap-3 text-lg shadow-2xl shadow-white/5 disabled:opacity-40 transition-all active:scale-95"
+        >
+          {isLoading ? <Loader2 size={24} className="animate-spin" /> : <CheckCircle size={24} />}
+          {isLoading ? 'Confirming...' : 'Handoff Complete'}
+        </button>
+        <p className="text-center text-[10px] text-muted font-bold mt-4 uppercase tracking-[0.2em] opacity-40">Identity & Gear Verified · ID: {txId?.slice(0,8)}</p>
+      </div>
     </div>
   );
 };

@@ -2,7 +2,7 @@ import { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { authenticate } from '../middleware/authenticate';
 import {
-  createTransaction, getTransactionById,
+  createTransaction, getTransactionById, getTransactionByRequestId,
   getTransactionsByUser, updateTransactionStatus,
 } from '../db/queries/transactions';
 import { getGearById, updateGearStatus } from '../db/queries/gear';
@@ -63,6 +63,14 @@ export default async function transactionRoutes(app: FastifyInstance) {
     const userId = request.user.sub;
     const transactions = await getTransactionsByUser(userId);
     return reply.send({ transactions });
+  });
+
+  // GET /transactions/request/:requestId
+  app.get('/request/:requestId', { preHandler: authenticate }, async (request, reply) => {
+    const { requestId } = request.params as { requestId: string };
+    const tx = await getTransactionByRequestId(requestId);
+    if (!tx) return reply.code(404).send({ error: 'No active transaction for this request' });
+    return reply.send({ transaction: tx });
   });
 
   // GET /transactions/:id

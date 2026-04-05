@@ -1,73 +1,88 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, Navigation, MessageSquare, Loader2, MapPin } from 'lucide-react';
+import { 
+  ArrowLeft, Navigation, MessageSquare, Loader2, MapPin,
+  Package, Check, ChevronRight, X, Handshake
+} from 'lucide-react';
 import { MapContainer, TileLayer, Marker, Circle, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import { apiClient } from '../api/client';
+import { useAuth } from '../store/AuthContext';
 
-// Fix Leaflet default icon paths broken by bundlers
+// Fix Leaflet issue
 delete (L.Icon.Default.prototype as any)._getIconUrl;
 L.Icon.Default.mergeOptions({
-  iconUrl:       'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
-  iconRetinaUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png',
-  shadowUrl:     'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
+  iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon-2x.png',
+  iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png',
+  shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
 });
 
 interface RequestData {
-  id:           string;
-  equipment:    string;
-  urgency:      'normal' | 'soon' | 'urgent' | 'emergency';
-  notes?:       string;
-  raw_text?:    string;
-  status:       string;
-  requester_id: string;
-  lat?:         number;
-  lng?:         number;
-  users?:       { name: string };
+  id:               string;
+  requester_id:     string;
+  equipment:        string;
+  category:         string;
+  quantity:         number;
+  urgency:          string;
+  action:           string;
+  status:           string;
+  notes:            string | null;
+  lat:              number;
+  lng:              number;
+  created_at:       string;
+  users?: {
+    name: string;
+  };
 }
 
-const URGENCY_BADGE: Record<string, string> = {
-  emergency: 'badge-emergency',
-  urgent:    'badge-urgent',
-  soon:      'badge-soon',
-  normal:    'badge-normal',
+interface GearItem {
+  id:         string;
+  name:       string;
+  category:   string;
+  photo_urls: string[];
+}
+
+const URGENCY_COLORS: Record<string, string> = {
+  emergency: '#ef4444',
+  urgent:    '#f97316',
+  soon:      '#eab308',
+  normal:    '#06b6d4',
 };
 
-const URGENCY_COLOR: Record<string, string> = {
-  emergency: '#EF4444',
-  urgent:    '#EA580C',
-  soon:      '#F59E0B',
-  normal:    '#3B82F6',
-};
-
-// Custom pulsing red marker icon
-const pulsingIcon = (color: string) =>
-  L.divIcon({
-    className: '',
+const CustomMarker = ({ color }: { color: string }) => {
+  const icon = L.divIcon({
+    className: 'custom-div-icon',
     html: `<div style="
       width:24px;height:24px;border-radius:50%;
       background:${color};border:3px solid white;
-      box-shadow:0 0 0 4px ${color}55,0 2px 8px rgba(0,0,0,0.5);
-      animation:none;
+      box-shadow:0 2px 8px rgba(0,0,0,0.5);
     "></div>`,
     iconSize: [24, 24],
     iconAnchor: [12, 12],
   });
+  return icon;
+};
 
-// Fit map to marker on load
-function FlyTo({ lat, lng }: { lat: number; lng: number }) {
+const MapUpdater = ({ center }: { center: [number, number] }) => {
   const map = useMap();
-  useEffect(() => { map.setView([lat, lng], 15); }, [lat, lng]);
+  useEffect(() => { map.setView(center, 14); }, [center, map]);
   return null;
-}
+};
 
 const RequestDetail = () => {
   const navigate = useNavigate();
   const { id }   = useParams<{ id: string }>();
+  const { user } = useAuth();
 
-  const [request, setRequest]   = useState<RequestData | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError]       = useState('');
+  const [request, setRequest]     = useState<RequestData | null>(null);
+  const [isLoading, setIsLoading]   = useState(true);
+  const [error, setError]           = useState('');
+
+  // Gear selection
+  const [showGearSelect, setShowGearSelect] = useState(false);
+  const [myGear, setMyGear]                 = useState<GearItem[]>([]);
+  const [loadingGear, setLoadingGear]       = useState(false);
+  const [selectedGearId, setSelectedGearId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!id) return;
@@ -77,113 +92,147 @@ const RequestDetail = () => {
       .finally(() => setIsLoading(false));
   }, [id]);
 
-  if (isLoading) {
-    return (
-      <div className="flex h-full items-center justify-center">
-        <Loader2 size={36} className="animate-spin text-accent-cyan" />
-      </div>
-    );
-  }
+  const fetchMyGear = async () => {
+    setLoadingGear(true);
+    try {
+      const { data } = await apiClient.get('/gear/mine');
+      setMyGear(data.items || []);
+    } catch {
+      setMyGear([]);
+    } finally {
+      setLoadingGear(false);
+    }
+  };
 
-  if (error || !request) {
-    return (
-      <div className="flex flex-col h-full items-center justify-center gap-4 px-6">
-        <p className="text-secondary text-center">{error || 'Request not found.'}</p>
-        <button onClick={() => navigate(-1)} className="text-sm text-accent-cyan">Go back</button>
-      </div>
-    );
-  }
+  const handleOpenRespond = () => {
+    setShowGearSelect(true);
+    fetchMyGear();
+  };
 
-  const hasCoords = request.lat != null && request.lng != null;
-  const markerColor = URGENCY_COLOR[request.urgency] ?? URGENCY_COLOR.normal;
+  const currentSelectedGear = myGear.find(g => g.id === selectedGearId);
+
+  if (isLoading) return <div className="flex h-full items-center justify-center"><Loader2 size={36} className="animate-spin text-accent-cyan" /></div>;
+  if (error || !request) return <div className="flex h-full items-center justify-center p-6 text-secondary">{error || 'Request not found.'}</div>;
+
+  const color = URGENCY_COLORS[request.urgency] || '#94a3b8';
+  const isMatched = request.status === 'matched' || request.status === 'fulfilled';
 
   return (
-    <div className="flex flex-col min-h-full animate-fade-in bg-bg-primary">
-
-      {/* Map Area */}
-      <div className="relative h-64 bg-gray-900 overflow-hidden">
-        {hasCoords ? (
-          <MapContainer
-            center={[request.lat!, request.lng!]}
-            zoom={15}
-            zoomControl={false}
-            style={{ width: '100%', height: '100%' }}
-            attributionControl={false}
-          >
-            <TileLayer
-              url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
-              attribution='&copy; <a href="https://carto.com/">CARTO</a>'
-            />
-            <FlyTo lat={request.lat!} lng={request.lng!} />
-            <Marker
-              position={[request.lat!, request.lng!]}
-              icon={pulsingIcon(markerColor)}
-            />
-            <Circle
-              center={[request.lat!, request.lng!]}
-              radius={300}
-              pathOptions={{ color: markerColor, fillColor: markerColor, fillOpacity: 0.08, weight: 1 }}
-            />
-          </MapContainer>
-        ) : (
-          /* Fallback placeholder if no coords */
-          <div className="flex flex-col items-center justify-center h-full gap-2 opacity-40">
-            <MapPin size={40} className="text-gray-500" />
-            <span className="text-xs text-gray-500 uppercase tracking-widest">Location unavailable</span>
-          </div>
-        )}
-
-        {/* Gradient overlay bottom */}
-        <div className="absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-bg-primary to-transparent pointer-events-none z-[400]" />
-
-        {/* Back button */}
-        <button
-          onClick={() => navigate(-1)}
-          className="absolute top-4 left-4 w-10 h-10 bg-black/60 backdrop-blur-md rounded-full flex items-center justify-center border border-gray-700 z-[500]"
-        >
-          <ArrowLeft size={20} className="text-white" />
+    <div className="flex flex-col h-full bg-bg-primary animate-slide-up relative overflow-hidden">
+      {/* Header */}
+      <div className="absolute top-0 left-0 right-0 z-[100] p-4 flex justify-between items-center pointer-events-none">
+        <button onClick={() => navigate(-1)} className="w-10 h-10 bg-black/40 backdrop-blur-md rounded-full flex items-center justify-center border border-white/10 pointer-events-auto">
+          <ArrowLeft size={20} />
         </button>
       </div>
 
-      {/* Details */}
-      <div className="flex-1 px-4 pt-4 pb-28">
-        <div className="flex justify-between items-start mb-4">
-          <div>
-            <h1 className="text-2xl font-bold mb-1">{request.equipment}</h1>
-            <p className="text-secondary text-sm">{request.users?.name || 'Local Fixer'}</p>
+      {/* Map Area */}
+      <div className="h-[40vh] w-full relative">
+        <MapContainer center={[request.lat, request.lng]} zoom={14} zoomControl={false} style={{ height: '100%', width: '100%' }}>
+          <TileLayer url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png" />
+          <Marker position={[request.lat, request.lng]} icon={CustomMarker({ color })} />
+          <Circle center={[request.lat, request.lng]} radius={1000} pathOptions={{ fillColor: color, color: color, weight: 1, fillOpacity: 0.1 }} />
+          <MapUpdater center={[request.lat, request.lng]} />
+        </MapContainer>
+        <div className="absolute bottom-0 left-0 right-0 h-24 bg-gradient-to-t from-bg-primary to-transparent z-10" />
+      </div>
+
+      {/* Content */}
+      <div className="flex-1 px-4 -mt-12 relative z-20 space-y-6 pb-40 overflow-y-auto">
+        <div className="flex justify-between items-start">
+          <div className="space-y-1">
+            <span className="text-[10px] font-black uppercase tracking-[0.2em] text-muted" style={{ color }}>{request.urgency} Request</span>
+            <h1 className="text-3xl font-black">{request.equipment}</h1>
+            <p className="text-secondary font-medium">Requested by {request.users?.name || 'Anonymous'}</p>
           </div>
-          <span className={`badge ${URGENCY_BADGE[request.urgency] ?? 'badge-normal'} uppercase`}>
-            {request.urgency}
-          </span>
+          <div className="bg-bg-secondary border border-bg-glass-border px-4 py-2 rounded-2xl text-center">
+            <span className="text-[10px] uppercase font-bold text-muted block">Qty</span>
+            <span className="text-lg font-black">{request.quantity}</span>
+          </div>
         </div>
 
-        {(() => {
-          const note = request.notes === 'parser_fallback' ? null : (request.notes || request.raw_text);
-          return note ? (
-            <div className="glass-panel mb-4">
-              <p className="text-sm text-secondary leading-relaxed">"{note}"</p>
-            </div>
-          ) : null;
-        })()}
+        {request.notes && (
+          <div className="glass-panel border-l-4" style={{ borderLeftColor: color }}>
+            <p className="text-sm text-secondary leading-relaxed italic">"{request.notes}"</p>
+          </div>
+        )}
+
+        {isMatched && (
+           <div className="glass-panel bg-green-500/10 border-green-500/20 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                 <div className="w-10 h-10 rounded-full bg-green-500/20 flex items-center justify-center text-green-500"><Handshake size={20} /></div>
+                 <div>
+                    <p className="text-sm font-bold text-green-400">Match Found</p>
+                    <p className="text-[10px] text-green-500/80 uppercase font-black tracking-widest leading-none">Gear Secured</p>
+                 </div>
+              </div>
+              <button 
+                onClick={async () => {
+                   try {
+                     const res = await apiClient.get(`/transactions/request/${request.id}`);
+                     navigate('/transaction', { state: { transactionId: res.data.transaction.id, equipment: request.equipment }});
+                   } catch {
+                     setError('Could not find transaction details.');
+                   }
+                }}
+                className="text-xs font-black bg-green-500 text-black px-4 py-2 rounded-xl active:scale-95 transition-transform"
+              >
+                VIEW DEAL
+              </button>
+           </div>
+        )}
+
+        <div className="glass-panel space-y-4">
+           <div className="flex items-center gap-4">
+              <div className="w-10 h-10 rounded-full bg-white/5 flex items-center justify-center border border-white/5"><MapPin size={18} className="text-muted" /></div>
+              <div><p className="text-xs text-muted font-bold uppercase tracking-widest">Location</p><p className="text-sm font-semibold">Crisis Zone · Approx. 1.2km</p></div>
+           </div>
+        </div>
       </div>
 
-      {/* Action Buttons — fixed bottom */}
-      <div className="fixed left-0 right-0 max-w-[480px] mx-auto px-4 pt-4 bg-gradient-to-t from-bg-primary to-transparent z-[110]" style={{ bottom: 'calc(64px + 1.5rem)', paddingBottom: '1rem' }}>
+      {/* Actions */}
+      {!isMatched && (
+      <div className="fixed bottom-8 left-0 right-0 max-w-[480px] mx-auto px-4 z-[110]">
         <div className="flex gap-3">
-          <button
-            onClick={() => navigate(`/chat/${request.id}`, { state: { recipientId: request.requester_id, equipment: request.equipment } })}
-            className="flex-1 bg-secondary text-white font-bold py-4 rounded-xl flex items-center justify-center gap-2 border border-bg-glass-border"
-          >
-            <MessageSquare size={18} /> Chat
-          </button>
-          <button
-            onClick={() => navigate('/transaction', { state: { requestId: request.id, equipment: request.equipment, lat: request.lat, lng: request.lng } })}
-            className="flex-1 btn-emergency py-4 text-base shadow-none"
-          >
-            <Navigation size={18} /> Respond
-          </button>
+          {request.requester_id === user?.id ? (
+            <button onClick={() => navigate('/requests')} className="flex-1 bg-white/10 backdrop-blur-md text-white font-bold py-4 rounded-2xl border border-white/10">Manage My Request</button>
+          ) : (
+            <>
+              <button onClick={() => navigate(`/chat/${request.id}`, { state: { recipientId: request.requester_id } })} className="w-14 h-14 bg-white/5 backdrop-blur-md flex items-center justify-center rounded-2xl border border-white/10"><MessageSquare size={22} /></button>
+              <button onClick={handleOpenRespond} className="flex-1 bg-white text-black font-black py-4 rounded-2xl flex items-center justify-center gap-2 shadow-xl shadow-white/10">
+                <Navigation size={18} className="fill-black" /> Respond Now
+              </button>
+            </>
+          )}
         </div>
       </div>
+      )}
+
+      {/* Gear Selection Modal */}
+      {showGearSelect && (
+        <div className="fixed inset-0 z-[200] bg-black/60 backdrop-blur-sm animate-fade-in flex flex-col justify-end">
+           <div className="absolute inset-0" onClick={() => setShowGearSelect(false)} />
+           <div className="relative bg-[#111] w-full max-w-[480px] mx-auto rounded-t-[2.5rem] border-t border-white/10 animate-slide-up flex flex-col" style={{ maxHeight: '80vh', paddingBottom: 'env(safe-area-inset-bottom)' }}>
+              <div className="px-6 py-6 border-b border-white/5">
+                <h2 className="text-xl font-black">Select Gear to Offer</h2>
+              </div>
+              <div className="flex-1 overflow-y-auto px-4 py-4 space-y-3">
+                {loadingGear ? <div className="flex justify-center py-12"><Loader2 size={24} className="animate-spin text-accent-cyan" /></div>
+                : myGear.length === 0 ? <div className="text-center py-12"><p className="text-secondary">No gear in inventory.</p></div>
+                : myGear.map(gear => (
+                  <div key={gear.id} onClick={() => setSelectedGearId(gear.id)} className={`flex items-center gap-3 p-3 rounded-2xl border transition-all ${selectedGearId === gear.id ? 'bg-white/10 border-white/30' : 'bg-white/5 border-white/5 opacity-60'}`}>
+                    <div className="w-12 h-12 rounded-xl bg-gray-800 shrink-0 overflow-hidden">{gear.photo_urls?.[0] && <img src={gear.photo_urls[0]} className="w-full h-full object-cover" />}</div>
+                    <div className="flex-1"><h4 className="text-sm font-bold">{gear.name}</h4><p className="text-[10px] text-muted uppercase">{gear.category}</p></div>
+                    {selectedGearId === gear.id && <Check size={18} className="text-white" />}
+                  </div>
+                ))}
+              </div>
+              <div className="p-6">
+                 <button onClick={() => navigate('/transaction', { state: { requestId: request.id, gearItemId: selectedGearId, borrowerId: request.requester_id, equipment: request.equipment, gearName: currentSelectedGear?.name }})} disabled={!selectedGearId} className="w-full bg-white text-black font-black py-4 rounded-2xl disabled:opacity-30">Confirm Offer</button>
+              </div>
+           </div>
+        </div>
+      )}
     </div>
   );
 };

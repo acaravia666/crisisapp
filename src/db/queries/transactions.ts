@@ -36,6 +36,14 @@ export async function getTransactionById(id: string): Promise<Transaction | null
   return rows[0] ?? null;
 }
 
+export async function getTransactionByRequestId(requestId: string): Promise<Transaction | null> {
+  const { rows } = await pool.query<Transaction>(
+    `SELECT * FROM transactions WHERE request_id = $1 AND status != 'cancelled' LIMIT 1`,
+    [requestId]
+  );
+  return rows[0] ?? null;
+}
+
 export async function getTransactionsByUser(userId: string): Promise<Transaction[]> {
   const { rows } = await pool.query<Transaction>(
     `SELECT * FROM transactions
