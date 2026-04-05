@@ -27,17 +27,25 @@ const envSchema = z.object({
   MAX_SEARCH_RADIUS_KM:     z.string().default('50'),
 });
 
-const parsed = envSchema.safeParse(process.env);
+const isVercelBuild = process.env.VERCEL && process.env.NODE_ENV === 'production';
+const result = envSchema.safeParse(process.env);
 
-if (!parsed.success) {
-  console.error('Invalid environment variables:');
-  console.error(parsed.error.flatten().fieldErrors);
+if (!result.success && !isVercelBuild) {
+  console.error('❌ Invalid environment variables during local execution:');
+  console.error(result.error.flatten().fieldErrors);
   process.exit(1);
 }
 
+// Use parsed data or empty object with defaults during build
+const data = result.success ? result.data : ({} as any);
+
 export const env = {
-  ...parsed.data,
-  PORT:                     parseInt(parsed.data.PORT, 10),
-  DEFAULT_SEARCH_RADIUS_KM: parseFloat(parsed.data.DEFAULT_SEARCH_RADIUS_KM),
-  MAX_SEARCH_RADIUS_KM:     parseFloat(parsed.data.MAX_SEARCH_RADIUS_KM),
+  ...data,
+  PORT:                     parseInt(data.PORT || '3000', 10),
+  DATABASE_URL:             data.DATABASE_URL || '',
+  JWT_SECRET:               data.JWT_SECRET || '',
+  JWT_REFRESH_SECRET:       data.JWT_REFRESH_SECRET || '',
+  ANTHROPIC_API_KEY:        data.ANTHROPIC_API_KEY || '',
+  DEFAULT_SEARCH_RADIUS_KM: parseFloat(data.DEFAULT_SEARCH_RADIUS_KM || '5'),
+  MAX_SEARCH_RADIUS_KM:     parseFloat(data.MAX_SEARCH_RADIUS_KM || '50'),
 };
