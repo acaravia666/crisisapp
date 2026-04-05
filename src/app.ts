@@ -67,12 +67,25 @@ export async function buildApp() {
     decorateReply: false,
   });
 
-  await app.register(fastifyRateLimit, {
-    global: true,
-    max: 200,
-    timeWindow: '1 minute',
-    redis,
-  });
+  if (env.REDIS_URL && env.REDIS_URL !== 'redis://localhost:6379') {
+    try {
+      await app.register(fastifyRateLimit, {
+        global: true,
+        max: 200,
+        timeWindow: '1 minute',
+        redis,
+      });
+    } catch (err) {
+      console.warn('Could not register Redis rate limit (Possible connection error):', err);
+    }
+  } else {
+    // Basic in-memory rate limit as fallback
+    await app.register(fastifyRateLimit, {
+      global: true,
+      max: 100,
+      timeWindow: '1 minute',
+    });
+  }
 
   await app.register(fastifyJwt, {
     secret: env.JWT_SECRET,
