@@ -15,6 +15,18 @@ interface NearbyRequest {
   distance_m?: number;
 }
 
+interface NearbyGear {
+  id:         string;
+  name:       string;
+  category:   string;
+  photo_urls: string[];
+  distance_m?: number;
+  can_rent:   boolean;
+  can_lend:   boolean;
+  can_sell:   boolean;
+  rent_price?: number;
+}
+
 interface Notification {
   id:         string;
   type:       string;
@@ -116,6 +128,7 @@ const Home = () => {
   const [locationLabel, setLocationLabel] = useState<string>('Locating...');
   const [nearby, setNearby]               = useState<NearbyRequest[]>([]);
   const [loadingNearby, setLoadingNearby] = useState(true);
+  const [nearbyGear, setNearbyGear]       = useState<NearbyGear[]>([]);
   const [searchQuery, setSearchQuery]     = useState('');
 
   // ── Notifications ────────────────────────────────────────────────────────
@@ -177,11 +190,18 @@ const Home = () => {
   // ── Nearby requests ───────────────────────────────────────────────────────
   useEffect(() => {
     setLoadingNearby(true);
+    const { lat, lng } = coords;
+    // Fetch nearby requests
     apiClient
-      .get(`/requests/nearby?lat=${coords.lat}&lng=${coords.lng}&radius=10&limit=3`)
+      .get(`/requests/nearby?lat=${lat}&lng=${lng}&radius=10&limit=3`)
       .then(res => setNearby(res.data.requests || []))
       .catch(() => setNearby([]))
       .finally(() => setLoadingNearby(false));
+    // Fetch nearby gear
+    apiClient
+      .get(`/gear/nearby?lat=${lat}&lng=${lng}&radius=10&limit=6`)
+      .then(res => setNearbyGear(res.data.items || []))
+      .catch(() => setNearbyGear([]));
   }, [coords.lat, coords.lng]);
 
   // ── Search ────────────────────────────────────────────────────────────────
@@ -287,6 +307,46 @@ const Home = () => {
           ))}
         </div>
       </section>
+
+      {/* Available Gear Nearby */}
+      {nearbyGear.length > 0 && (
+        <section className="mb-8 animate-slide-up stagger-4">
+          <div className="flex justify-between items-end mb-3">
+            <h2 className="text-lg font-bold tracking-tight">Available Nearby</h2>
+            <button
+              onClick={() => navigate('/requests')}
+              className="text-xs font-bold text-accent-cyan flex items-center gap-1 active-press"
+            >
+              View All <ArrowRight size={14} />
+            </button>
+          </div>
+          <div className="flex gap-3 overflow-x-auto pb-2 no-scrollbar">
+            {nearbyGear.map(item => (
+              <div
+                key={item.id}
+                onClick={() => navigate(`/gear/${item.id}`)}
+                className="flex-shrink-0 w-36 glass-panel p-0 overflow-hidden cursor-pointer card-lift active-press"
+              >
+                <div className="w-full h-28 bg-gray-800 flex items-center justify-center overflow-hidden">
+                  {item.photo_urls?.[0]
+                    ? <img src={item.photo_urls[0]} alt={item.name} className="w-full h-full object-cover" />
+                    : <span className="text-3xl">🎸</span>
+                  }
+                </div>
+                <div className="p-2">
+                  <p className="text-xs font-bold truncate">{item.name}</p>
+                  <p className="text-[10px] text-accent-cyan font-bold mt-0.5">
+                    {item.can_rent && item.rent_price ? `$${item.rent_price}/hr` : item.can_lend ? 'Free Lend' : 'For Sale'}
+                  </p>
+                  {item.distance_m != null && (
+                    <p className="text-[9px] text-muted mt-0.5">{(item.distance_m / 1000).toFixed(1)} km away</p>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
 
       {/* Emergency CTA */}
       <div className="mb-10 animate-slide-up stagger-4">
