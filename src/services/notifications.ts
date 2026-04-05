@@ -18,10 +18,20 @@ async function getFcmSender() {
   if (sendFcmMulticast) return sendFcmMulticast;
 
   if (!env.FCM_PROJECT_ID || !env.FCM_CLIENT_EMAIL || !env.FCM_PRIVATE_KEY) {
-    console.warn('[FCM] Firebase credentials not configured — push notifications disabled.');
+    console.warn('[FCM] ❌ Firebase credentials not configured — push notifications disabled.');
+    console.warn('[FCM]    Missing vars:', [
+      !env.FCM_PROJECT_ID  ? 'FCM_PROJECT_ID'  : null,
+      !env.FCM_CLIENT_EMAIL ? 'FCM_CLIENT_EMAIL' : null,
+      !env.FCM_PRIVATE_KEY  ? 'FCM_PRIVATE_KEY'  : null,
+    ].filter(Boolean).join(', '));
     sendFcmMulticast = async () => {};
     return sendFcmMulticast;
   }
+
+  console.log('[FCM] Initializing Firebase Admin SDK…');
+  console.log('[FCM]   project_id:   ', env.FCM_PROJECT_ID);
+  console.log('[FCM]   client_email: ', env.FCM_CLIENT_EMAIL);
+  console.log('[FCM]   private_key:  ', env.FCM_PRIVATE_KEY.slice(0, 40) + '…');
 
   try {
     // Dynamic import so missing creds don't crash startup
@@ -35,12 +45,20 @@ async function getFcmSender() {
           privateKey:  env.FCM_PRIVATE_KEY!.replace(/\\n/g, '\n'),
         }),
       });
+      console.log('[FCM] ✅ Firebase Admin initialized');
+    } else {
+      console.log('[FCM] Firebase Admin already initialized, reusing app');
     }
 
     const messaging = admin.messaging();
 
     sendFcmMulticast = async (tokens: string[], payload: FcmPayload) => {
-      if (tokens.length === 0) return;
+      if (tokens.length === 0) {
+        console.log('[FCM] No device tokens to send to — skipping push');
+        return;
+      }
+
+      console.log(`[FCM] Sending "${payload.title}" to ${tokens.length} device(s)`);
 
       // FCM allows max 500 tokens per multicast
       const chunks: string[][] = [];
@@ -48,7 +66,7 @@ async function getFcmSender() {
         chunks.push(tokens.slice(i, i + 500));
       }
 
-      await Promise.all(chunks.map(chunk =>
+      const results = await Promise.all(chunks.map(chunk =>
         messaging.sendEachForMulticast({
           tokens: chunk,
           notification: { title: payload.title, body: payload.body },
@@ -57,9 +75,18 @@ async function getFcmSender() {
           apns: { payload: { aps: { sound: 'default', badge: 1 } } },
         })
       ));
+
+      for (const r of results) {
+        console.log(`[FCM] ✅ Success: ${r.successCount}  ❌ Failed: ${r.failureCount}`);
+        if (r.failureCount > 0) {
+          r.responses.forEach((resp, i) => {
+            if (!resp.success) console.error(`[FCM]   token[${i}] error:`, resp.error?.message);
+          });
+        }
+      }
     };
   } catch (err) {
-    console.error('[FCM] Initialization error:', err);
+    console.error('[FCM] ❌ Initialization error:', err);
     sendFcmMulticast = async () => {};
   }
 

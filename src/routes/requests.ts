@@ -12,10 +12,20 @@ import { env } from '../config/env';
 
 async function triggerMatching(req: Awaited<ReturnType<typeof createRequest>>) {
   try {
-    const matches   = await findMatches(req as any);
-    const topN      = matches.slice(0, getNotifyCount(req.urgency));
-    if (!topN.length) return;
-    const tokenMap  = await getDeviceTokens(topN.map(m => m.owner_id));
+    const loc = (req as any).location ?? {};
+    console.log(`[matching] Request ${req.id} — "${req.equipment}" (${req.urgency}) at (${loc.lat},${loc.lng})`);
+    const matches = await findMatches(req as any);
+    console.log(`[matching] Found ${matches.length} candidate(s)`);
+
+    const topN = matches.slice(0, getNotifyCount(req.urgency));
+    if (!topN.length) {
+      console.log('[matching] No candidates to notify — done');
+      return;
+    }
+
+    const tokenMap = await getDeviceTokens(topN.map(m => m.owner_id));
+    console.log(`[matching] Device tokens fetched for ${Object.keys(tokenMap).length}/${topN.length} owner(s)`);
+
     if (req.urgency === 'emergency') {
       await broadcastEmergency(req as any, topN, tokenMap);
     } else {
