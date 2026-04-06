@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { 
+import {
   ArrowLeft, Navigation, MessageSquare, Loader2, MapPin,
   Package, Check, ChevronRight, X, Handshake, Clock, DollarSign
 } from 'lucide-react';
@@ -8,6 +8,7 @@ import { MapContainer, TileLayer, Marker, Circle, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import { apiClient } from '../api/client';
 import { useAuth } from '../store/AuthContext';
+import { useSettings } from '../store/SettingsContext';
 
 // Fix Leaflet issue
 delete (L.Icon.Default.prototype as any)._getIconUrl;
@@ -78,6 +79,7 @@ const RequestDetail = () => {
   const navigate = useNavigate();
   const { id }   = useParams<{ id: string }>();
   const { user } = useAuth();
+  const { t }    = useSettings();
 
   const [request, setRequest]     = useState<RequestData | null>(null);
   const [isLoading, setIsLoading]   = useState(true);
@@ -188,7 +190,7 @@ const RequestDetail = () => {
       </div>
 
       {/* Map Area */}
-      <div className="h-[28vh] w-full relative">
+      <div className="h-[200px] w-full relative">
         <MapContainer center={[request.lat, request.lng]} zoom={14} zoomControl={false} style={{ height: '100%', width: '100%' }}>
           <TileLayer url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png" />
           <Marker position={[request.lat, request.lng]} icon={CustomMarker({ color })} />
@@ -202,12 +204,12 @@ const RequestDetail = () => {
       <div className="flex-1 px-4 -mt-12 relative z-20 space-y-6 pb-40 overflow-y-auto">
         <div className="flex justify-between items-start">
           <div className="space-y-1">
-            <span className="text-[10px] font-black uppercase tracking-[0.2em] text-muted" style={{ color }}>{request.urgency} Request</span>
+            <span className="text-[10px] font-black uppercase tracking-[0.2em] text-muted" style={{ color }}>{request.urgency}</span>
             <h1 className="text-3xl font-black">{request.equipment}</h1>
-            <p className="text-secondary font-medium">Requested by {request.users?.name || 'Anonymous'}</p>
+            <p className="text-secondary font-medium">{t('request.requestedBy')} {request.users?.name || t('common.anonymous')}</p>
           </div>
           <div className="bg-bg-secondary border border-bg-glass-border px-4 py-2 rounded-2xl text-center">
-            <span className="text-[10px] uppercase font-bold text-muted block">Qty</span>
+            <span className="text-[10px] uppercase font-bold text-muted block">{t('request.qty')}</span>
             <span className="text-lg font-black">{request.quantity}</span>
           </div>
         </div>
@@ -223,8 +225,8 @@ const RequestDetail = () => {
               <div className="flex items-center gap-3">
                  <div className="w-10 h-10 rounded-full bg-green-500/20 flex items-center justify-center text-green-500"><Handshake size={20} /></div>
                  <div>
-                    <p className="text-sm font-bold text-green-400">Match Found</p>
-                    <p className="text-[10px] text-green-500/80 uppercase font-black tracking-widest leading-none">Gear Secured</p>
+                    <p className="text-sm font-bold text-green-400">{t('request.matchFound')}</p>
+                    <p className="text-[10px] text-green-500/80 uppercase font-black tracking-widest leading-none">{t('request.gearSecured')}</p>
                  </div>
               </div>
               <button 
@@ -238,7 +240,7 @@ const RequestDetail = () => {
                 }}
                 className="text-xs font-black bg-green-500 text-black px-4 py-2 rounded-xl active:scale-95 transition-transform"
               >
-                VIEW DEAL
+                {t('request.viewDeal')}
               </button>
            </div>
         )}
@@ -246,7 +248,7 @@ const RequestDetail = () => {
         <div className="glass-panel space-y-4">
            <div className="flex items-center gap-4">
               <div className="w-10 h-10 rounded-full bg-white/5 flex items-center justify-center border border-white/5"><MapPin size={18} className="text-muted" /></div>
-              <div><p className="text-xs text-muted font-bold uppercase tracking-widest">Location</p><p className="text-sm font-semibold">Crisis Zone · Approx. 1.2km</p></div>
+              <div><p className="text-xs text-muted font-bold uppercase tracking-widest">{t('request.location')}</p><p className="text-sm font-semibold">{t('request.crisisZone')} · Approx. 1.2km</p></div>
            </div>
         </div>
       </div>
@@ -260,13 +262,13 @@ const RequestDetail = () => {
               onClick={() => setShowCancelConfirm(true)}
               className="flex-1 bg-red-500/10 backdrop-blur-md text-red-400 font-bold py-4 rounded-2xl border border-red-500/20"
             >
-              Cancel My Request
+              {t('request.cancelRequest')}
             </button>
           ) : (
             <>
               <button onClick={() => navigate(`/chat/${request.id}`, { state: { recipientId: request.requester_id } })} className="w-14 h-14 bg-white/5 backdrop-blur-md flex items-center justify-center rounded-2xl border border-white/10"><MessageSquare size={22} /></button>
               <button onClick={handleOpenRespond} className="flex-1 bg-white text-black font-black py-4 rounded-2xl flex items-center justify-center gap-2 shadow-xl shadow-white/10">
-                <Navigation size={18} className="fill-black" /> Respond Now
+                <Navigation size={18} className="fill-black" /> {t('request.respondNow')}
               </button>
             </>
           )}
@@ -279,9 +281,9 @@ const RequestDetail = () => {
         <div className="fixed inset-0 z-[200] bg-black/60 backdrop-blur-sm flex items-end justify-center">
           <div className="absolute inset-0" onClick={() => setShowCancelConfirm(false)} />
           <div className="relative w-full max-w-[480px] bg-[#111] rounded-t-[2.5rem] border-t border-white/10 p-6 space-y-4 animate-slide-up">
-            <h2 className="text-xl font-black text-center">Cancel Request?</h2>
+            <h2 className="text-xl font-black text-center">{t('request.cancelConfirm')}</h2>
             <p className="text-sm text-secondary text-center leading-relaxed">
-              Your request for <span className="font-bold text-white">{request.equipment}</span> will be removed from the feed.
+              {t('request.cancelBody')} <span className="font-bold text-white">{request.equipment}</span>
             </p>
             <button
               onClick={handleCancelRequest}
@@ -289,13 +291,13 @@ const RequestDetail = () => {
               className="w-full bg-red-500 text-white font-black py-4 rounded-2xl flex items-center justify-center gap-2 disabled:opacity-50 active:scale-95 transition-transform"
             >
               {cancelLoading ? <Loader2 size={18} className="animate-spin" /> : null}
-              {cancelLoading ? 'Cancelling...' : 'Yes, Cancel Request'}
+              {cancelLoading ? t('request.cancelling') : t('request.cancelYes')}
             </button>
             <button
               onClick={() => setShowCancelConfirm(false)}
               className="w-full bg-white/5 border border-white/10 text-white font-bold py-4 rounded-2xl"
             >
-              Keep It
+              {t('request.keepIt')}
             </button>
           </div>
         </div>
@@ -313,13 +315,13 @@ const RequestDetail = () => {
             <div className="px-6 pt-6 pb-4 flex items-center justify-between">
               {step === 'terms' ? (
                 <button onClick={() => setStep('pick')} className="flex items-center gap-1.5 text-xs font-black text-muted uppercase tracking-widest">
-                  <ChevronRight size={14} className="rotate-180" /> Back
+                  <ChevronRight size={14} className="rotate-180" /> {t('request.back')}
                 </button>
               ) : (
                 <div />
               )}
               <h2 className="text-base font-black absolute left-1/2 -translate-x-1/2">
-                {step === 'pick' ? 'Choose Gear' : 'Deal Terms'}
+                {step === 'pick' ? t('request.selectGear') : t('request.terms')}
               </h2>
               <button
                 onClick={() => setShowGearSelect(false)}
@@ -461,7 +463,7 @@ const RequestDetail = () => {
                   onClick={handleConfirmOffer}
                   className="w-full bg-green-500 text-black font-black py-4 rounded-2xl flex items-center justify-center gap-2 shadow-xl shadow-green-500/20 active:scale-95 transition-transform"
                 >
-                  <Check size={18} strokeWidth={3} /> Confirm Deal
+                  <Check size={18} strokeWidth={3} /> {t('request.confirmOffer')}
                 </button>
               )}
             </div>

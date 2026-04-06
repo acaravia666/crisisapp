@@ -226,8 +226,11 @@ const Home = () => {
       {/* Header */}
       <header className="flex justify-between items-center mb-6 mt-4 animate-slide-up stagger-1">
         <div className="flex items-center gap-2">
-          <div className="w-10 h-10 rounded-full bg-secondary border border-bg-glass-border flex items-center justify-center">
-            <span className="text-sm font-bold text-white uppercase">{user?.name?.charAt(0) || '?'}</span>
+          <div className="w-10 h-10 rounded-full bg-secondary border border-bg-glass-border flex items-center justify-center overflow-hidden">
+            {user?.avatar_url
+              ? <img src={user.avatar_url} alt={user.name} className="w-full h-full object-cover" />
+              : <span className="text-sm font-bold text-white uppercase">{user?.name?.charAt(0) || '?'}</span>
+            }
           </div>
           <div className="flex flex-col">
             <span className="text-sm font-bold">{user?.name || 'Musician'}</span>

@@ -143,7 +143,7 @@ const Profile = () => {
               <Star size={16} className="text-yellow-400 fill-yellow-400" />
               {avgRating ?? '—'}
             </span>
-            <span className="text-xs text-muted mt-0.5">Rating</span>
+            <span className="text-xs text-muted mt-0.5">{t('profile.rating')}</span>
           </div>
 
           <div className="w-px bg-bg-glass-border" />
@@ -153,7 +153,7 @@ const Profile = () => {
               <CheckCircle size={16} className="text-accent-cyan" />
               {user?.review_count ?? reviews.length}
             </span>
-            <span className="text-xs text-muted mt-0.5">Reviews</span>
+            <span className="text-xs text-muted mt-0.5">{t('profile.reviews')}</span>
           </div>
 
           <div className="w-px bg-bg-glass-border" />
@@ -163,7 +163,7 @@ const Profile = () => {
               <Package size={16} className="text-accent-purple" />
               {gearCount ?? '—'}
             </span>
-            <span className="text-xs text-muted mt-0.5">Items</span>
+            <span className="text-xs text-muted mt-0.5">{t('profile.items')}</span>
           </div>
         </div>
       </div>
@@ -173,7 +173,7 @@ const Profile = () => {
 
         <h3 className="text-base font-bold mb-4 flex items-center gap-2">
           <Star size={16} className="text-yellow-400 fill-yellow-400" />
-          Reviews
+          {t('profile.reviews')}
         </h3>
 
         {loadingReviews ? (
@@ -183,15 +183,15 @@ const Profile = () => {
         ) : reviews.length === 0 ? (
           <div className="text-center py-10">
             <Star size={36} className="text-gray-700 mx-auto mb-3" />
-            <p className="text-secondary text-sm">No reviews yet.</p>
-            <p className="text-muted text-xs mt-1">Complete transactions to collect reviews.</p>
+            <p className="text-secondary text-sm">{t('profile.noReviews')}</p>
+            <p className="text-muted text-xs mt-1">{t('profile.noReviewsHint')}</p>
           </div>
         ) : (
           <div className="space-y-3">
             {reviews.map(review => (
               <div key={review.id} className="glass-panel p-4">
                 <div className="flex justify-between items-start mb-2">
-                  <span className="font-bold text-sm text-secondary">Anonymous</span>
+                  <span className="font-bold text-sm text-secondary">{t('common.anonymous')}</span>
                   <div className="flex gap-0.5">
                     {[1, 2, 3, 4, 5].map(s => (
                       <Star
@@ -269,7 +269,7 @@ const Profile = () => {
             <div className="flex justify-between items-center px-5 py-3 border-b border-bg-glass-border mb-2">
               <h2 className="text-base font-bold flex items-center gap-2">
                 <Camera size={16} className="text-accent-cyan" />
-                Edit Profile
+                {t('profile.editProfile')}
               </h2>
               <button onClick={() => setShowEdit(false)} className="text-muted hover:text-white">
                 <X size={20} />
@@ -286,7 +286,7 @@ const Profile = () => {
               {/* Avatar */}
               <div>
                 <label className="text-xs text-muted uppercase tracking-wider mb-1.5 block">
-                  Profile Photo
+                  {t('profile.photo')}
                 </label>
                 <input
                   ref={fileInputRef}
@@ -312,7 +312,7 @@ const Profile = () => {
                     className="flex items-center gap-2 px-4 py-2 rounded-xl border border-bg-glass-border text-sm font-medium text-secondary hover:text-white hover:border-accent-cyan/50 transition-all"
                   >
                     <Camera size={15} />
-                    {avatarPreview ? 'Change photo' : 'Upload photo'}
+                    {avatarPreview ? t('profile.changePhoto') : t('profile.uploadPhoto')}
                   </button>
                   {avatarPreview && (
                     <button
@@ -329,7 +329,7 @@ const Profile = () => {
               {/* Name */}
               <div>
                 <label className="text-xs text-muted uppercase tracking-wider mb-1.5 block">
-                  Display Name *
+                  {t('profile.editName')} *
                 </label>
                 <input
                   type="text"
@@ -343,7 +343,7 @@ const Profile = () => {
               {/* Bio */}
               <div>
                 <label className="text-xs text-muted uppercase tracking-wider mb-1.5 block">
-                  Bio
+                  {t('profile.editBio')}
                 </label>
                 <textarea
                   value={editBio}
@@ -359,7 +359,7 @@ const Profile = () => {
               {/* Phone */}
               <div>
                 <label className="text-xs text-muted uppercase tracking-wider mb-1.5 block">
-                  Phone (optional)
+                  {t('profile.editPhone')}
                 </label>
                 <input
                   type="tel"
@@ -380,7 +380,7 @@ const Profile = () => {
                   ? <Loader2 size={16} className="animate-spin" />
                   : <Check size={16} />
                 }
-                {saving ? 'Saving...' : 'Save Changes'}
+                {saving ? t('profile.saving') : t('profile.save')}
               </button>
             </form>
           </div>
