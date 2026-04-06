@@ -188,7 +188,7 @@ const RequestDetail = () => {
       </div>
 
       {/* Map Area */}
-      <div className="h-[40vh] w-full relative">
+      <div className="h-[28vh] w-full relative">
         <MapContainer center={[request.lat, request.lng]} zoom={14} zoomControl={false} style={{ height: '100%', width: '100%' }}>
           <TileLayer url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png" />
           <Marker position={[request.lat, request.lng]} icon={CustomMarker({ color })} />

@@ -34,7 +34,7 @@ export async function findUserById(id: string): Promise<User | null> {
   const { rows } = await pool.query<User>(
     `SELECT id, name, email, phone, avatar_url, bio,
             avg_rating, review_count, response_rate,
-            last_seen_at, is_active, created_at, updated_at
+            is_verified, last_seen_at, is_active, created_at, updated_at
      FROM users WHERE id = $1 AND is_active = true`,
     [id]
   );

@@ -65,6 +65,22 @@
   --glass-blur: blur(20px);
 }
 
+/* Light mode overrides */
+.light-mode {
+  --bg-primary:      #F8F8FA;
+  --bg-secondary:    #FFFFFF;
+  --bg-tertiary:     #EFEFEF;
+  --bg-glass:        rgba(255, 255, 255, 0.80);
+  --bg-glass-border: rgba(0, 0, 0, 0.10);
+
+  --text-primary:    #0A0A0C;
+  --text-secondary:  #52525B;
+  --text-muted:      #A1A1AA;
+
+  --color-surface:   #FFFFFF;
+  --color-on-surface: #0A0A0C;
+}
+
 * {
   box-sizing: border-box;
   margin: 0;
@@ -348,11 +364,16 @@ button {
   border: 1px solid transparent;
 }
 
-.badge-emergency { 
-  background: rgba(239, 68, 68, 0.1); 
-  color: #FF5F5F; 
+.badge-emergency {
+  background: rgba(239, 68, 68, 0.1);
+  color: #FF5F5F;
   border-color: rgba(239, 68, 68, 0.3);
   box-shadow: 0 0 10px rgba(239, 68, 68, 0.2);
+}
+
+/* Hide Leaflet attribution */
+.leaflet-control-attribution {
+  display: none !important;
 }
 
 /* UI/UX Pro Max: Accessibility Skip Link */

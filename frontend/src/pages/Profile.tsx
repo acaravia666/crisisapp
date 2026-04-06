@@ -1,7 +1,9 @@
 import { useEffect, useState, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Star, MapPin, CheckCircle, Package, Loader2, LogOut, Settings, X, Check, Camera } from 'lucide-react';
 import VerifiedBadge from '../components/VerifiedBadge';
 import { useAuth } from '../store/AuthContext';
+import { useSettings } from '../store/SettingsContext';
 import { apiClient } from '../api/client';
 
 interface Review {
@@ -13,7 +15,9 @@ interface Review {
 }
 
 const Profile = () => {
+  const navigate = useNavigate();
   const { user, checkAuth, logout } = useAuth();
+  const { t } = useSettings();
 
   const [reviews, setReviews]           = useState<Review[]>([]);
   const [gearCount, setGearCount]       = useState<number | null>(null);
@@ -218,10 +222,21 @@ const Profile = () => {
             className="w-full flex items-center justify-between px-4 py-3.5 rounded-xl glass-panel text-sm font-medium hover:bg-white/5 transition-colors"
           >
             <span className="flex items-center gap-2">
-              <Settings size={16} className="text-muted" />
-              Edit Profile
+              <Camera size={16} className="text-muted" />
+              {t('profile.editProfile')}
             </span>
             <span className="text-muted text-xs">Name, bio, phone</span>
+          </button>
+
+          <button
+            onClick={() => navigate('/settings')}
+            className="w-full flex items-center justify-between px-4 py-3.5 rounded-xl glass-panel text-sm font-medium hover:bg-white/5 transition-colors"
+          >
+            <span className="flex items-center gap-2">
+              <Settings size={16} className="text-muted" />
+              {t('profile.settings')}
+            </span>
+            <span className="text-muted text-xs">Language, theme</span>
           </button>
 
           <button
@@ -229,7 +244,7 @@ const Profile = () => {
             className="w-full flex items-center justify-center gap-2 py-3.5 rounded-xl border border-red-500/20 text-urgency-emergency text-sm font-bold hover:bg-red-500/10 transition-colors"
           >
             <LogOut size={16} />
-            Sign Out
+            {t('profile.signOut')}
           </button>
         </div>
       </div>

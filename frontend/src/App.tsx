@@ -5,6 +5,7 @@ import CreateRequest from './pages/CreateRequest';
 import Feed from './pages/Feed';
 import Inventory from './pages/Inventory';
 import Profile from './pages/Profile';
+import Settings from './pages/Settings';
 import Onboarding from './pages/Onboarding';
 import Signup from './pages/Signup';
 import Login from './pages/Login';
@@ -23,14 +24,15 @@ function App() {
       <Route path="/onboarding" element={<Onboarding />} />
       <Route path="/signup" element={<Signup />} />
       <Route path="/login" element={<Login />} />
-      
+
       {/* Secured Screens inside PrivateRoute */}
       <Route element={<PrivateRoute />}>
         <Route path="/chat/:contextId" element={<ChatScreen />} />
         <Route path="/transaction" element={<Transaction />} />
         <Route path="/rating" element={<Rating />} />
         <Route path="/gear/:id" element={<GearDetail />} />
-        
+        <Route path="/settings" element={<Settings />} />
+
         {/* Screens inside the Layout/BottomNav flow */}
         <Route path="/" element={<Layout />}>
           <Route index element={<Home />} />
