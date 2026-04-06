@@ -127,7 +127,13 @@ export default async function gearRoutes(app: FastifyInstance) {
       return reply.code(409).send({ error: 'Cannot delete gear with an active transaction. Complete or cancel the deal first.' });
     }
 
-    // Clear FK references from completed/cancelled transactions and requests
+    // Clear FK references in order: reviews → transactions → requests
+    await pool.query(
+      `DELETE FROM reviews WHERE transaction_id IN (
+         SELECT id FROM transactions WHERE gear_item_id = $1 AND status IN ('completed','cancelled','disputed')
+       )`,
+      [id]
+    );
     await pool.query(`DELETE FROM transactions WHERE gear_item_id = $1 AND status IN ('completed','cancelled','disputed')`, [id]);
     await pool.query(`UPDATE gear_requests SET matched_gear_id = NULL WHERE matched_gear_id = $1`, [id]);
 
