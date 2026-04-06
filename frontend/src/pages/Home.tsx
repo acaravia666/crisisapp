@@ -6,6 +6,7 @@ import {
   X, Bell, BellOff, CheckCheck, Handshake, Package, ChevronRight
 } from 'lucide-react';
 import { useAuth } from '../store/AuthContext';
+import { useSettings } from '../store/SettingsContext';
 import { apiClient } from '../api/client';
 
 interface NearbyRequest {
@@ -131,9 +132,10 @@ function getNotifAction(notif: Notification): { route: string; state?: Record<st
 const Home = () => {
   const navigate = useNavigate();
   const { user }  = useAuth();
+  const { t }     = useSettings();
 
   const [coords, setCoords]               = useState<Coords>(getSavedCoords());
-  const [locationLabel, setLocationLabel] = useState<string>('Locating...');
+  const [locationLabel, setLocationLabel] = useState<string>(t('home.locating'));
   const [nearby, setNearby]               = useState<NearbyRequest[]>([]);
   const [loadingNearby, setLoadingNearby] = useState(true);
   const [nearbyGear, setNearbyGear]       = useState<NearbyGear[]>([]);
@@ -233,7 +235,7 @@ const Home = () => {
             }
           </div>
           <div className="flex flex-col">
-            <span className="text-sm font-bold">{user?.name || 'Musician'}</span>
+            <span className="text-sm font-bold">{user?.name || '—'}</span>
             <span className="text-xs text-secondary flex items-center gap-1"><MapPin size={12} className="text-accent-cyan" /> {locationLabel}</span>
           </div>
         </div>
@@ -253,7 +255,7 @@ const Home = () => {
           <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-muted transition-colors group-focus-within:text-accent-cyan" size={20} />
           <input
             type="text"
-            placeholder="Search: 'Adapter', '9V', 'XLR'..."
+            placeholder={t('home.search')}
             className="w-full bg-secondary border border-bg-glass-border rounded-2xl py-4 pl-12 pr-4 text-sm focus:outline-none focus:ring-2 focus:ring-accent-cyan/50 transition-all shadow-lg"
             value={searchQuery}
             onChange={e => setSearchQuery(e.target.value)}
@@ -265,7 +267,7 @@ const Home = () => {
       <section className="mb-10 animate-slide-up stagger-3">
         <div className="flex justify-between items-center mb-4 px-1">
           <h2 className="text-xs font-black uppercase tracking-[0.2em] text-muted flex items-center gap-2">
-            <Handshake size={14} className="text-green-500" /> Active Deals v2
+            <Handshake size={14} className="text-green-500" /> {t('home.activeDeals')}
           </h2>
           {activeDeals.length > 0 && <span className="badge badge-emergency">{activeDeals.length} LIVE</span>}
         </div>
@@ -278,8 +280,8 @@ const Home = () => {
                  <div className="flex items-start gap-4">
                     <div className="w-12 h-12 bg-white/5 rounded-2xl flex items-center justify-center border border-white/10 shrink-0"><Package size={22} className="text-white" /></div>
                     <div className="flex-1 min-w-0">
-                       <p className="text-[10px] text-green-400 font-black uppercase tracking-widest mb-1">In Progress</p>
-                       <h4 className="text-sm font-black truncate">{tx.gear_name || 'Acquiring Item...'}</h4>
+                       <p className="text-[10px] text-green-400 font-black uppercase tracking-widest mb-1">{t('home.inProgress')}</p>
+                       <h4 className="text-sm font-black truncate">{tx.gear_name || '...'}</h4>
                        <div className="flex justify-between items-center mt-2">
                           <span className="text-[11px] font-black bg-white/5 px-2 py-0.5 rounded-lg border border-white/10">${tx.agreed_price}</span>
                           <span className="text-[9px] font-black uppercase text-muted">Details <ChevronRight size={10} className="inline"/></span>
@@ -291,8 +293,8 @@ const Home = () => {
           </div>
         ) : (
           <div className="glass-panel py-6 text-center border-dashed border-white/5 opacity-50">
-             <p className="text-xs text-secondary font-medium italic">No active dealings right now.</p>
-             <p className="text-[10px] text-muted font-bold uppercase tracking-widest mt-1">Accept a request to see your deal here.</p>
+             <p className="text-xs text-secondary font-medium italic">{t('home.noDeals')}</p>
+             <p className="text-[10px] text-muted font-bold uppercase tracking-widest mt-1">{t('home.noDealsHint')}</p>
           </div>
         )}
       </section>
@@ -300,8 +302,8 @@ const Home = () => {
       {/* Categories */}
       <section className="mb-10 animate-slide-up stagger-4">
         <div className="flex justify-between items-end mb-4 px-1">
-          <h2 className="text-lg font-black tracking-tight">Browse Categories</h2>
-          <button onClick={() => navigate('/requests')} className="text-xs font-bold text-accent-cyan flex gap-1 active-press">All <ArrowRight size={14} /></button>
+          <h2 className="text-lg font-black tracking-tight">{t('home.browseCategories')}</h2>
+          <button onClick={() => navigate('/requests')} className="text-xs font-bold text-accent-cyan flex gap-1 active-press">{t('home.seeAll')} <ArrowRight size={14} /></button>
         </div>
         <div className="grid grid-cols-3 gap-3">
           {CATEGORIES.map((cat, idx) => (
@@ -317,8 +319,8 @@ const Home = () => {
       {nearbyGear.length > 0 && (
         <section className="mb-10 animate-slide-up stagger-5">
           <div className="flex justify-between items-end mb-4 px-1">
-            <h2 className="text-lg font-black tracking-tight">Available Nearby</h2>
-            <button onClick={() => navigate('/requests')} className="text-xs font-bold text-accent-cyan flex gap-1 active-press">Map <ArrowRight size={14} /></button>
+            <h2 className="text-lg font-black tracking-tight">{t('home.availableNearby')}</h2>
+            <button onClick={() => navigate('/requests')} className="text-xs font-bold text-accent-cyan flex gap-1 active-press">{t('home.seeAll')} <ArrowRight size={14} /></button>
           </div>
           <div className="flex gap-4 overflow-x-auto pb-4 no-scrollbar -mx-6 px-6">
             {nearbyGear.map(item => (
@@ -330,7 +332,7 @@ const Home = () => {
                   <p className="text-xs font-black truncate">{item.name}</p>
                   <div className="flex justify-between items-center mt-1">
                     <p className="text-[11px] text-green-400 font-bold">
-                       {item.can_sell && item.sell_price ? `$${item.sell_price}` : item.can_rent && item.rent_price ? `$${item.rent_price}/hr` : 'Free'}
+                       {item.can_sell && item.sell_price ? `$${item.sell_price}` : item.can_rent && item.rent_price ? `$${item.rent_price}/hr` : t('home.free')}
                     </p>
                     {item.distance_m != null && <p className="text-[9px] text-muted">{(item.distance_m / 1000).toFixed(1)}km</p>}
                   </div>
@@ -350,8 +352,8 @@ const Home = () => {
             <div className="btn-emergency-pulse" style={{ animationDelay: '1s' }} />
             <ShieldAlert size={42} className="mb-2 text-white" />
             <div className="flex flex-col items-center">
-              <span className="text-display text-2xl">GEAR EMERGENCY</span>
-              <span className="text-[10px] font-black opacity-90 tracking-[0.3em] uppercase mt-1">Request Support Now</span>
+              <span className="text-display text-2xl">{t('home.gearEmergency')}</span>
+              <span className="text-[10px] font-black opacity-90 tracking-[0.3em] uppercase mt-1">{t('home.requestSupport')}</span>
             </div>
           </button>
         </div>
@@ -361,14 +363,14 @@ const Home = () => {
       <div className="mt-auto mb-10 glass-panel animate-slide-up stagger-7">
         <div className="flex justify-between items-center mb-4 px-1">
           <h3 className="text-[10px] font-black text-muted uppercase tracking-[0.2em] flex items-center gap-2">
-            <Zap size={14} className="text-accent-cyan" /> Live Network
+            <Zap size={14} className="text-accent-cyan" /> {t('home.liveNetwork')}
           </h3>
           {nearby.length > 0 && <span className="badge badge-emergency">{nearby.length} LIVE</span>}
         </div>
         {loadingNearby ? (
           <div className="flex justify-center py-6"><Loader2 size={24} className="animate-spin text-accent-cyan" /></div>
         ) : nearby.length === 0 ? (
-          <p className="text-sm text-muted text-center py-4 italic">No active requests in this zone.</p>
+          <p className="text-sm text-muted text-center py-4 italic">{t('home.noRequests2')}</p>
         ) : (
           <div className="flex flex-col gap-3">
             {nearby.map((req, index) => (
@@ -396,7 +398,7 @@ const Home = () => {
           <div className="absolute bottom-0 left-0 right-0 max-w-[480px] mx-auto bg-bg-secondary rounded-t-[2.5rem] border-t border-bg-glass-border animate-slide-up" style={{ maxHeight: '75vh', paddingBottom: 'calc(env(safe-area-inset-bottom) + 1rem)' }} onClick={e => e.stopPropagation()}>
             <div className="flex justify-center pt-4 pb-2"><div className="w-10 h-1 bg-gray-600 rounded-full" /></div>
             <div className="flex justify-between items-center px-6 py-4 border-b border-bg-glass-border">
-              <h2 className="text-lg font-black flex items-center gap-2"><Bell size={18} className="text-urgency-soon" /> Updates</h2>
+              <h2 className="text-lg font-black flex items-center gap-2"><Bell size={18} className="text-urgency-soon" /> {t('home.notifications')}</h2>
               <button onClick={() => setShowNotifs(false)} className="text-muted"><X size={24} /></button>
             </div>
             <div className="overflow-y-auto" style={{ maxHeight: 'calc(75vh - 100px)' }}>
@@ -405,7 +407,7 @@ const Home = () => {
               ) : notifications.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-14 gap-3">
                   <BellOff size={40} className="text-gray-700" />
-                  <p className="text-secondary text-sm font-bold">All clear.</p>
+                  <p className="text-secondary text-sm font-bold">{t('home.allClear')}</p>
                 </div>
               ) : (
                 <div className="divide-y divide-bg-glass-border">
