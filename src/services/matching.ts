@@ -54,13 +54,22 @@ export async function findMatches(request: GearRequest): Promise<MatchCandidate[
     request.action === 'sell' ? 'gi.can_sell = true' :
                                 'gi.can_lend = true';
 
+  // Build values and optional category filter
   const values: unknown[] = [
     loc.lng, loc.lat,
     radiusM,
-    request.category,
     request.requester_id,
   ];
 
+  let categoryFilter = '';
+  if (request.category) {
+    values.push(request.category);
+    categoryFilter = `AND gi.category = $${values.length}`;
+  }
+
+  const requestPoint = `ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography`;
+
+  // Use gear_items.location as fallback if user_locations has no row
   const { rows } = await pool.query<Omit<MatchCandidate, 'score'>>(
     `SELECT
        gi.id          AS gear_id,
@@ -68,24 +77,24 @@ export async function findMatches(request: GearRequest): Promise<MatchCandidate[
        u.name         AS owner_name,
        gi.name        AS gear_name,
        gi.category,
-       u.avg_rating,
-       u.response_rate,
+       COALESCE(u.avg_rating, 0)    AS avg_rating,
+       COALESCE(u.response_rate, 0) AS response_rate,
        ST_Distance(
-         ul.location,
-         ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography
+         COALESCE(ul.location, gi.location),
+         ${requestPoint}
        ) AS distance_m
      FROM gear_items gi
-     JOIN user_locations ul ON ul.user_id = gi.owner_id
-     JOIN users u            ON u.id = gi.owner_id
+     LEFT JOIN user_locations ul ON ul.user_id = gi.owner_id
+     JOIN users u                ON u.id = gi.owner_id
      WHERE gi.status = 'available'
        AND ${actionCol}
-       AND gi.owner_id != $5
+       AND gi.owner_id != $4
        AND ST_DWithin(
-         ul.location,
-         ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography,
+         COALESCE(ul.location, gi.location),
+         ${requestPoint},
          $3
        )
-       AND gi.category = $4
+       ${categoryFilter}
      ORDER BY distance_m ASC
      LIMIT 50`,
     values
